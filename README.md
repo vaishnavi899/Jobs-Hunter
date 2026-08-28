@@ -39,6 +39,8 @@ jobhunter parse                # raw_posts -> structured jobs (Haiku, or offline
 jobhunter filter               # apply hard criteria; survivors -> passed_filter
 jobhunter score                # 0-100 fit score (weights from config.yaml)
 jobhunter draft [-n N]         # tailored drafts for scored jobs (Sonnet, or offline template)
+jobhunter send                 # write ready-to-send .eml files to ./outbox/ (sends NOTHING)
+jobhunter send --send --i-confirm   # gated real Gmail send (needs a recipient + OAuth creds)
 jobhunter run --dry-run        # one full cycle, writes to ./outbox, sends nothing
 jobhunter run --live           # one full cycle (still approval-gated per channel)
 jobhunter watch                # scheduler loop (poll every N minutes)
@@ -73,8 +75,9 @@ Built as separate commits; each checkpoint pauses for verification.
 1. Scaffold, config, SQLite models, CLI skeleton
 2. Ingest (manual intake) + dedupe
 3. Parse + filter
-4. **Score + draft** ← current
-5. Email adapter + dry-run (gated)
+4. Score + draft
+5. **Email adapter + dry-run (gated)** ← current
+
 6. Greenhouse + Lever adapters (gated)
 7. Ashby, Workable, generic form (gated)
 8. Telegram + scheduler + safety rails

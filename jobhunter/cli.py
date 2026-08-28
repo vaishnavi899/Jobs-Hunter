@@ -179,6 +179,38 @@ def draft(limit: int = typer.Option(None, "--limit", "-n", help="Draft only the 
 
 
 @app.command()
+def send(
+    do_send: bool = typer.Option(False, "--send", help="Arm the real Gmail send path (still requires --i-confirm)."),
+    i_confirm: bool = typer.Option(False, "--i-confirm", help="Second confirmation required alongside --send."),
+    limit: int = typer.Option(None, "--limit", "-n", help="Process only the top N drafts by fit score."),
+) -> None:
+    """Write ready-to-send .eml files to ./outbox/ for drafted jobs. Sends NOTHING by default.
+
+    Default: dry-run — one .eml per drafted job, nothing transmitted.
+    Real send is gated: you must pass BOTH --send AND --i-confirm, and even
+    then a message only leaves the machine when the job has a real recipient
+    and Gmail OAuth credentials exist; otherwise it falls back to a .eml.
+    """
+    from .submit import run_send
+
+    cfg = load_config()
+    if do_send and not i_confirm:
+        console.print("[red]Refusing to send:[/red] --send requires --i-confirm. Dry-running instead.")
+        do_send = False
+    result = run_send(cfg, do_send=do_send, confirm=i_confirm, limit=limit)
+    c = result["counts"]
+    console.print(
+        f"[green]Send ({'LIVE' if result['live'] else 'dry-run'})[/green] — "
+        f"wrote [bold]{c['written']}[/bold] .eml to {result['outbox']}, "
+        f"{c['sent']} sent, {c['skipped_existing']} already-written, "
+        f"{c['skipped_sent']} already-sent, {c['needs_auth']} needs-auth, "
+        f"{c['needs_human']} no-recipient, {c['failed']} failed."
+    )
+    if not result["live"]:
+        console.print("[dim]Nothing was transmitted. Real send needs `--send --i-confirm` + credentials.[/dim]")
+
+
+@app.command()
 def run(dry_run: bool = typer.Option(True, "--dry-run/--live", help="Dry-run writes to ./outbox, never sends.")) -> None:
     """One full cycle: ingest -> parse -> filter -> score -> draft -> (dry-run outbox)."""
     _pending("run")
