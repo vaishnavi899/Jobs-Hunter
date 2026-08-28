@@ -34,6 +34,7 @@ your machine.
 ```
 jobhunter init                 # scaffold dirs, create schema, check config
 jobhunter paste "<post text>"  # queue a raw post into the manual inbox
+jobhunter ingest               # pull inbox -> raw_posts, dedupe already-seen
 jobhunter run --dry-run        # one full cycle, writes to ./outbox, sends nothing
 jobhunter run --live           # one full cycle (still approval-gated per channel)
 jobhunter watch                # scheduler loop (poll every N minutes)
@@ -65,8 +66,8 @@ jobhunter/
 
 Built as separate commits; each checkpoint pauses for verification.
 
-1. **Scaffold, config, SQLite models, CLI skeleton** ← current
-2. Ingest (manual intake) + dedupe
+1. Scaffold, config, SQLite models, CLI skeleton
+2. **Ingest (manual intake) + dedupe** ← current
 3. Parse + filter
 4. Score + draft
 5. Email adapter + dry-run (gated)

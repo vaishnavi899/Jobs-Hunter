@@ -90,6 +90,27 @@ def paste(
 
 
 @app.command()
+def ingest() -> None:
+    """Pull new posts from the active source, dedupe, and store them.
+
+    Manual-intake source: reads inbox/ (and anything queued via `paste`).
+    Already-seen posts are skipped by content hash.
+    """
+    from .ingest import run_ingest
+
+    cfg = load_config()
+    result = run_ingest(cfg)
+    console.print(
+        f"[green]Ingest[/green] source={cfg.ingest.active_source} — "
+        f"fetched {result.fetched}, added [bold]{result.added}[/bold], "
+        f"skipped {result.skipped_duplicate} duplicate(s), archived {result.archived}."
+    )
+    with store.get_session(cfg) as session:
+        total = session.query(store.RawPost).count()
+    console.print(f"raw_posts total: [bold]{total}[/bold]")
+
+
+@app.command()
 def run(dry_run: bool = typer.Option(True, "--dry-run/--live", help="Dry-run writes to ./outbox, never sends.")) -> None:
     """One full cycle: ingest -> parse -> filter -> score -> draft -> (dry-run outbox)."""
     _pending("run")
