@@ -1,0 +1,36 @@
+# --- jobhunter: never commit personal data or secrets ---
+.env
+profile/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+outbox/
+screenshots/
+.auth/
+
+# The original build-spec prompt (contains personal contact details)
+spec.txt
+pasted-text.txt
+
+# Kill switch marker
+PAUSED
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.uv/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

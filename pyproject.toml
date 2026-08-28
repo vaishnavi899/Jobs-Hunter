@@ -1,0 +1,35 @@
+[project]
+name = "jobhunter"
+version = "0.1.0"
+description = "Self-hosted personal job-application agent (manual intake, approval-gated submission)."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.12",
+    "sqlalchemy>=2.0",
+    "pyyaml>=6.0",
+    "pydantic>=2.7",
+    "python-dotenv>=1.0",
+    "rich>=13.7",
+    # Pipeline dependencies land in their own checkpoints:
+    #   anthropic  (parse/draft)      -> checkpoints 3-4
+    #   apscheduler (watch loop)      -> checkpoint 8
+    #   playwright  (ATS adapters)    -> checkpoints 6-7
+    #   google-api-python-client, google-auth-oauthlib (Gmail) -> checkpoint 5
+    #   python-telegram-bot           -> checkpoint 8
+    #   httpx, beautifulsoup4         -> checkpoint 3 (link resolve + JD fetch)
+]
+
+[project.scripts]
+jobhunter = "jobhunter.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["jobhunter"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

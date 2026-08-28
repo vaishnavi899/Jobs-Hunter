@@ -1,0 +1,111 @@
+# jobhunter configuration — edit this, not the Python.
+# Currency is INR. Market is India (plus remote roles open to India).
+
+# ---------------------------------------------------------------------------
+# Target roles. Treated as data, not code — add/remove freely.
+# ---------------------------------------------------------------------------
+roles:
+  tier1:            # highest priority
+    - Forward Deployed Engineer
+    - SDE
+    - Software Development Engineer
+    - Software Engineer
+    - AI Engineer
+  tier2:            # included, ranked lower
+    - Solutions Engineer
+    - Deployment Engineer
+    - Implementation Engineer
+    - Applied AI Engineer
+    - ML Engineer
+    - LLM Engineer
+    - GenAI Engineer
+    - Backend Engineer
+    - Full Stack Engineer
+    - Platform Engineer
+    - Research Engineer
+    - Solutions Architect
+    - Developer Success Engineer
+  tier3:            # lowest priority
+    - Product Manager
+    - Product Manager Intern
+
+# ---------------------------------------------------------------------------
+# Hard filter criteria.
+# ---------------------------------------------------------------------------
+filters:
+  fulltime_min_inr_per_year: 800000      # 8 LPA, no upper limit
+  internship_min_inr_per_month: 35000    # no upper limit
+  max_experience_years: 1                # reject postings that DEMAND 2+ years
+  reject_if_fee_required: true
+  reject_if_unpaid_internship: true
+
+  # Most X posts omit compensation. Do NOT reject unknown salary — flag and
+  # rank lower. Reject only on CONFIRMED below-band numbers.
+  reject_on_unknown_salary: false
+
+  # When false, drop roles that are onsite OUTSIDE India (visa/sponsorship
+  # rarely available at this experience level). Remote-India always allowed.
+  allow_international: false
+
+# ---------------------------------------------------------------------------
+# Salary normalization.
+# ---------------------------------------------------------------------------
+salary:
+  usd_to_inr: 84.0        # used to convert "$" amounts to INR before compare
+  months_per_year: 12
+
+# ---------------------------------------------------------------------------
+# Fit score weights (0-100). Tune freely.
+# ---------------------------------------------------------------------------
+scoring:
+  role_tier:
+    tier1: 40
+    tier2: 25
+    tier3: 10
+  location_india_or_remote: 10   # flat; NO city preference (willing to relocate)
+  salary_confirmed_in_band: 25
+  salary_unknown: 12
+  tech_stack_overlap_max: 20     # computed against profile/resume.json skills
+  recency_max: 5                 # full <24h, decays to 0 at 7 days
+
+# ---------------------------------------------------------------------------
+# Ingestion.
+#   Manual intake is the first concrete Source (per resolved decision 1):
+#   no X automation, no scraping, no paid API. Vaishnavi forwards/pastes raw
+#   posts into the watched inbox dir or via `jobhunter paste`. A paid X API
+#   source can be added later behind the same Source protocol.
+# ---------------------------------------------------------------------------
+ingest:
+  active_source: manual
+  manual:
+    inbox_dir: ./inbox        # drop .txt/.json/.eml raw posts here
+    archive_processed: true   # move consumed files to ./inbox/_archived
+  poll_interval_minutes: 20   # used by the `watch` scheduler loop (checkpoint 8)
+
+# ---------------------------------------------------------------------------
+# Submission — APPROVAL-GATED, dry-run by default (per resolved decision 2).
+#   Nothing sends automatically in v1. Every draft is written to ./outbox/ and
+#   requires explicit per-application human approval (Telegram) before any send.
+#   Adapters are built but auto_send stays off until a channel is trusted.
+# ---------------------------------------------------------------------------
+submission:
+  dry_run_default: true       # first run and default posture: write, never send
+  require_approval: true      # explicit human approve/reject before every send
+  auto_send_channels: []      # channels graduated to auto later (email, ...)
+  delay_seconds_min: 30       # randomized inter-submission delay
+  delay_seconds_max: 90
+
+# ---------------------------------------------------------------------------
+# Daily caps.
+# ---------------------------------------------------------------------------
+caps:
+  emails_per_day: 25
+  ats_submissions_per_day: 15
+
+# ---------------------------------------------------------------------------
+# Applicant signature block (used in email bodies). Personal contact details
+# live in profile/resume.json, which is gitignored.
+# ---------------------------------------------------------------------------
+signature:
+  name: Vaishnavi
+  availability: "Available in 30 days (currently serving a 30-day notice period)."
