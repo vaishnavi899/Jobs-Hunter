@@ -6,6 +6,7 @@ Python. Secrets come from .env (never committed).
 
 from __future__ import annotations
 
+import json
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -111,6 +112,19 @@ class Config(BaseModel):
     @property
     def anthropic_api_key(self) -> str | None:
         return os.getenv("ANTHROPIC_API_KEY") or None
+
+
+RESUME_PATH = PROJECT_ROOT / "profile" / "resume.json"
+
+
+def load_resume() -> dict | None:
+    """Load profile/resume.json (the structured drafting source), or None.
+
+    profile/ is gitignored — this is Vaishnavi's personal data, read locally.
+    """
+    if RESUME_PATH.exists():
+        return json.loads(RESUME_PATH.read_text(encoding="utf-8"))
+    return None
 
 
 @lru_cache(maxsize=1)

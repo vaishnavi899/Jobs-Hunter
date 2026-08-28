@@ -145,6 +145,40 @@ def filter() -> None:  # noqa: A001 - CLI verb name mirrors the module
 
 
 @app.command()
+def score() -> None:
+    """Score passed_filter jobs 0-100 (weights from config.yaml) -> scored."""
+    from .score import run_score
+
+    cfg = load_config()
+    result = run_score(cfg)
+    console.print(f"[green]Score[/green] — scored [bold]{result['scored']}[/bold] job(s).")
+    if not result["resume_loaded"]:
+        console.print("[yellow]profile/resume.json not found[/yellow] — tech-overlap scored 0.")
+
+
+@app.command()
+def draft(limit: int = typer.Option(None, "--limit", "-n", help="Draft only the top N by fit score.")) -> None:
+    """Draft tailored applications for scored jobs (Sonnet, or offline template)."""
+    from .draft import run_draft
+
+    cfg = load_config()
+    result = run_draft(cfg, limit=limit)
+    if result.get("error"):
+        console.print(f"[red]{result['error']}[/red]")
+        raise typer.Exit(1)
+    console.print(
+        f"[green]Draft[/green] engine={result['engine']} — "
+        f"drafted [bold]{result['drafted']}[/bold], skipped {result['skipped']}. "
+        "Nothing sent (drafts cached as dry-run)."
+    )
+    if result["engine"] == "template" and not cfg.anthropic_api_key:
+        console.print(
+            "[yellow]No ANTHROPIC_API_KEY[/yellow] — used the offline template drafter. "
+            "Set the key (or llm.engine=llm) to draft with Sonnet."
+        )
+
+
+@app.command()
 def run(dry_run: bool = typer.Option(True, "--dry-run/--live", help="Dry-run writes to ./outbox, never sends.")) -> None:
     """One full cycle: ingest -> parse -> filter -> score -> draft -> (dry-run outbox)."""
     _pending("run")
