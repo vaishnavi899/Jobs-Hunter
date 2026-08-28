@@ -125,3 +125,6 @@ caps:
 signature:
   name: Vaishnavi
   availability: "Available in 30 days (currently serving a 30-day notice period)."
+  email: singhvaishnavi258@gmail.com
+  # Public Google Drive share link to resume.pdf (used in the outreach link block).
+  resume_link: "https://drive.google.com/file/d/1YbwTEkpjy1Y01MhIdrZUw9JWTXms7j-c/view?usp=sharing"

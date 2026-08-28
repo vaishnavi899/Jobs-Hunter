@@ -1,11 +1,21 @@
-"""Draft — one tailored application per surviving job.
+"""Draft — one tailored outreach message per surviving job.
+
+The message follows Vaishnavi's personal outreach template:
+
+  1. Opener — her intro (recent 2026 CS grad from JIIT Noida, now AI SDE at
+     Deepreef).
+  2. Skills line — her stated stack.
+  3. Middle — ONE custom JD-specific hook paragraph (what the role does / a
+     requirement she matches). Never addressed to a person.
+  4. Link block — Resume Link, Job link, Email id.
+  5. Close — "I'll be looking forward to your response. Thank you!" + her name.
 
 Two drafters behind one interface (same pattern as parse):
 
-  LLMDrafter (spec default): one Sonnet call per job. Inputs: resume.json, the
-    full JD text, and the original post. Output: subject line, a 150-200 word
-    cover note referencing something specific from the JD, and a reordered
-    top-6 resume bullet list.
+  LLMDrafter (spec default): one Sonnet call writes the prose (opener -> skills
+    -> JD hook -> [relocation] -> availability), 150-200 words. The link block
+    and close are appended deterministically so the resume link / job link /
+    email are always exact.
 
   TemplateDrafter (offline fallback + test engine): deterministic, no API key,
     no billing. Used automatically when no ANTHROPIC_API_KEY is set.
@@ -13,9 +23,9 @@ Two drafters behind one interface (same pattern as parse):
 Hard requirements (both engines):
   - Always state availability as "available in 30 days" — never imply immediate
     availability (Vaishnavi is employed, serving a 30-day notice).
-  - For an onsite role outside Delhi NCR, state plainly she will relocate.
-  - Use the configured contact email; no filler, no "I am writing to express
-    my interest."
+  - For an onsite role outside Delhi NCR, state plainly she will relocate; do
+    NOT include the line for Delhi NCR roles.
+  - Contact email from config as the from/reply-to identity; no filler.
 
 Drafts are cached as dry-run Application rows: a job that already has one is
 skipped, so a re-run never re-bills. NOTHING is sent here — submission adapters
@@ -37,8 +47,20 @@ from .store import (
     init_db,
 )
 
-CONTACT_EMAIL = "singhvaishnavi258@gmail.com"
 AVAILABILITY = "available in 30 days"
+
+# Fixed opener + skills line from Vaishnavi's template.
+OPENER = (
+    "I'm Vaishnavi, a recent 2026 Computer Science graduate from Jaypee "
+    "Institute of Information Technology (JIIT), Noida, currently working as an "
+    "AI SDE at Deepreef."
+)
+SKILLS_LINE = (
+    "My core strengths span AI/ML, Data Structures & Algorithms, SQL, Python, "
+    "C++, and Java, along with extensive web development — all backed by "
+    "hands-on projects and hackathons."
+)
+CLOSE = "I'll be looking forward to your response. Thank you!"
 
 DELHI_NCR = {
     "delhi", "new delhi", "ncr", "gurugram", "gurgaon",
@@ -64,6 +86,15 @@ def needs_relocation(job: Job) -> bool:
     return not is_delhi_ncr(job.location)
 
 
+def job_link(job: Job) -> str:
+    """The source post / JD URL for this job (for the 'Job link' line)."""
+    if job.raw_post and job.raw_post.source_url:
+        return job.raw_post.source_url
+    if job.apply_target and job.apply_target.startswith("http"):
+        return job.apply_target
+    return "(job post link)"
+
+
 def _all_bullets(resume: dict) -> list[str]:
     out: list[str] = []
     for exp in resume.get("experience", []):
@@ -86,27 +117,25 @@ def top_bullets(job: Job, resume: dict, n: int = 6) -> list[str]:
     return [bullets[i] for i in ranked[:n]]
 
 
+def links_and_close(job: Job, cfg: Config, resume: dict) -> str:
+    """The trailing link block + warm close — identical shape for both engines."""
+    name = resume.get("name") or cfg.signature.name
+    return "\n".join([
+        f"Resume Link: {cfg.signature.resume_link}",
+        f"Job link: {job_link(job)}",
+        f"Email id: {cfg.signature.email}",
+        "",
+        CLOSE,
+        name,
+    ])
+
+
+def assemble(prose: str, job: Job, cfg: Config, resume: dict) -> str:
+    return f"{prose}\n\n{links_and_close(job, cfg, resume)}"
+
+
 class TemplateDrafter:
     name = "template"
-
-    def __init__(self, cfg: Config):
-        self.cfg = cfg
-
-    # Concrete project to name, keyed by the skill families a job asks for.
-    _PROJECT_HOOKS = [
-        ({"langchain", "rag", "chromadb", "vector", "llm", "ml", "fine-tuning",
-          "prompt-engineering"},
-         "building Campus Companion, a local-first RAG assistant (LangChain + "
-         "ChromaDB, 85% retrieval confidence) and running large-scale prompt "
-         "tuning over LLM workflows at Deepreef"),
-        ({"react", "node", "javascript", "typescript", "next", "express",
-          "mongodb", "mysql"},
-         "shipping full-stack MERN features — a college portal with attendance, "
-         "dashboards, and an AI help assistant — plus FastAPI/Flask services"),
-        ({"c++", "c", "go", "rust"},
-         "engineering a multi-strategy CPU scheduler in C on Linux (FCFS, Round "
-         "Robin, Priority) with IPC across 50+ processes"),
-    ]
 
     # Pretty display labels for canonical skill tokens.
     _PRETTY = {
@@ -120,12 +149,31 @@ class TemplateDrafter:
         "fine-tuning": "LLM fine-tuning", "vector": "vector search", "nlp": "NLP",
     }
 
+    # Concrete project to name in the hook, keyed by the skills a job asks for.
+    _PROJECT_HOOKS = [
+        ({"langchain", "rag", "chromadb", "vector", "llm", "ml", "fine-tuning",
+          "prompt-engineering"},
+         "I built Campus Companion, a local-first RAG assistant (LangChain + "
+         "ChromaDB, 85% retrieval confidence), and run large-scale prompt tuning "
+         "over LLM workflows at Deepreef"),
+        ({"react", "node", "javascript", "typescript", "next", "express",
+          "mongodb", "mysql"},
+         "I've shipped full-stack MERN features — a college portal with "
+         "attendance, dashboards, and an AI help assistant — alongside "
+         "FastAPI/Flask services"),
+        ({"c++", "c", "go", "rust"},
+         "I engineered a multi-strategy CPU scheduler in C on Linux (FCFS, Round "
+         "Robin, Priority) with IPC across 50+ processes"),
+    ]
+
+    def __init__(self, cfg: Config):
+        self.cfg = cfg
+
     def draft(self, job: Job, jd_text: str, resume: dict) -> dict:
-        name = resume.get("name", "Vaishnavi")
-        company = job.company or "your team"
+        name = resume.get("name") or self.cfg.signature.name
         title = job.title or "the role"
+
         resume_canon = canonical_skills(resume.get("skills_flat", []))
-        # Canonical matched skills, deduped, in the order the JD listed them.
         matched_canon: list[str] = []
         for t in (job.tech_stack or []):
             c = _canon(t)
@@ -138,50 +186,46 @@ class TemplateDrafter:
         )
         project = next(
             (blurb for skills, blurb in self._PROJECT_HOOKS if matched_canon_set & skills),
-            "shipping production LLM systems end to end at Deepreef",
+            "I ship production LLM systems end to end at Deepreef",
         )
 
         subject = f"{title} — {name} (available in 30 days)"
 
-        paras = [f"Hi {company} team,", ""]
-        paras.append(
-            f"I'd like to be considered for {title}. Your post calls for "
-            f"{specific}, which is exactly the work I do as an SDE-AI at Deepreef, "
-            f"where I take AI features from research and prototyping through to "
-            f"production deployment."
-        )
+        # JD-specific hook (no person addressed). Replaces the old
+        # "I came across your profile..." line.
         if matched_display:
-            paras.append(
-                f"My hands-on stack lines up closely with what you listed — "
-                f"{', '.join(matched_display[:5])}. Recent work includes "
-                f"{project}. I care about correctness, keep changes tightly "
-                f"scoped, and hand work off cleanly for review."
+            hook = (
+                f"Your {title} role calls for {specific}, which is exactly what I "
+                f"work on: {project}. My hands-on stack lines up closely with what "
+                f"you listed — {', '.join(matched_display[:5])} — so I can "
+                f"contribute from day one."
             )
         else:
-            paras.append(
-                f"I bring production experience across Python, FastAPI/Flask, "
-                f"React/Node, and applied LLM/RAG work — recently {project}. I "
-                f"care about correctness and keep changes tightly scoped."
+            hook = (
+                f"Your {title} role is a strong fit for what I work on: {project}. "
+                f"I keep changes tightly scoped and hand work off cleanly for review."
             )
-        paras.append(
-            "Alongside that I've placed in the top 4% at Myntra HackerRamp and "
-            "solved 400+ DSA problems, so I move quickly without cutting corners."
-        )
+
+        parts = [
+            "Hi team,",
+            "",
+            OPENER,
+            SKILLS_LINE,
+            hook,
+        ]
         if needs_relocation(job):
-            paras.append(
+            parts.append(
                 f"This role is based in {job.location}, outside my Delhi NCR base — "
                 f"I'm glad to relocate there and am open to any location in India."
             )
-        paras.append(
-            f"I'm currently employed and can join within 30 days ({AVAILABILITY}). "
-            f"My resume is attached; you can reach me at {CONTACT_EMAIL}."
+        parts.append(
+            f"I'm currently employed and can join within 30 days ({AVAILABILITY})."
         )
-        paras.append("")
-        paras.append(name)
+        prose = "\n".join(parts)
 
         return {
             "subject": subject,
-            "body": "\n".join(paras),
+            "body": assemble(prose, job, self.cfg, resume),
             "resume_bullets": top_bullets(job, resume),
         }
 
@@ -211,21 +255,28 @@ class LLMDrafter:
 
         relocation = (
             f"This role is onsite in {job.location}, outside her Delhi NCR base — "
-            f"state plainly that she is willing to relocate."
+            f"include one sentence that she is glad to relocate and is open to any "
+            f"location in India."
             if needs_relocation(job)
-            else "Do not mention relocation."
+            else "Do NOT mention relocation."
         )
         prompt = (
-            "Write a tailored job application for this candidate. Requirements:\n"
-            "- A subject line.\n"
-            "- A 150-200 word cover note that references something SPECIFIC from "
-            "the job description. No filler; never write 'I am writing to express "
-            "my interest.'\n"
-            "- State availability as 'available in 30 days'. Never imply she can "
+            "Write the PROSE of a tailored outreach message for this candidate, "
+            "following her template EXACTLY in this order:\n"
+            f"1. Opener (use verbatim): \"{OPENER}\"\n"
+            f"2. Skills line (use verbatim or lightly adapted): \"{SKILLS_LINE}\"\n"
+            "3. ONE custom paragraph: a JD-specific hook tied to what THIS role "
+            "does or a concrete requirement she matches — reference something "
+            "specific from the job. Do NOT address a person; do NOT write 'I came "
+            "across your profile'. No filler, no 'I am writing to express my "
+            "interest.'\n"
+            f"4. {relocation}\n"
+            "5. State availability as 'available in 30 days' — never imply she can "
             "start immediately.\n"
-            f"- {relocation}\n"
-            f"- Sign off with her name and contact email {CONTACT_EMAIL}.\n"
-            "- A reordered top-6 list of her resume bullets, most relevant first.\n\n"
+            "Keep the PROSE (steps 1-5) between 150 and 200 words. Do NOT write a "
+            "greeting line, the resume/job/email link block, or a sign-off — those "
+            "are added separately. Also return a subject line and a reordered "
+            "top-6 list of her resume bullets, most relevant first.\n\n"
             f"RESUME (JSON):\n{json.dumps(resume)}\n\n"
             f"JOB (company={job.company}, title={job.title}, location={job.location}, "
             f"remote={job.remote}):\n{jd_text}"
@@ -238,9 +289,10 @@ class LLMDrafter:
         )
         text = next((b.text for b in resp.content if b.type == "text"), "")
         data = json.loads(text)
+        prose = "Hi team,\n\n" + data["cover_note"].strip()
         return {
             "subject": data["subject"],
-            "body": data["cover_note"],
+            "body": assemble(prose, job, self.cfg, resume),
             "resume_bullets": data["resume_bullets"],
         }
 

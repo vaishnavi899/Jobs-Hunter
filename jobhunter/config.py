@@ -86,6 +86,10 @@ class CapsConfig(BaseModel):
 class SignatureConfig(BaseModel):
     name: str = "Vaishnavi"
     availability: str = "Available in 30 days (currently serving a 30-day notice period)."
+    email: str = "singhvaishnavi258@gmail.com"
+    resume_link: str = (
+        "https://drive.google.com/file/d/1YbwTEkpjy1Y01MhIdrZUw9JWTXms7j-c/view?usp=sharing"
+    )
 
 
 class Config(BaseModel):
