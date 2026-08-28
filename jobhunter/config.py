@@ -40,6 +40,15 @@ class SalaryConfig(BaseModel):
     months_per_year: int = 12
 
 
+class LLMConfig(BaseModel):
+    parse_model: str = "claude-haiku-4-5"
+    draft_model: str = "claude-sonnet-5"
+    engine: str = "auto"  # auto | llm | heuristic
+    fetch_linked_pages: bool = True
+    request_timeout_seconds: int = 30
+    max_page_chars: int = 12000
+
+
 class ScoringConfig(BaseModel):
     role_tier: dict[str, int] = Field(default_factory=lambda: {"tier1": 40, "tier2": 25, "tier3": 10})
     location_india_or_remote: int = 10
@@ -82,6 +91,7 @@ class Config(BaseModel):
     roles: RolesConfig = Field(default_factory=RolesConfig)
     filters: FiltersConfig = Field(default_factory=FiltersConfig)
     salary: SalaryConfig = Field(default_factory=SalaryConfig)
+    llm: LLMConfig = Field(default_factory=LLMConfig)
     scoring: ScoringConfig = Field(default_factory=ScoringConfig)
     ingest: IngestConfig = Field(default_factory=IngestConfig)
     submission: SubmissionConfig = Field(default_factory=SubmissionConfig)
@@ -97,6 +107,10 @@ class Config(BaseModel):
     @property
     def is_paused(self) -> bool:
         return PAUSED_FILE.exists()
+
+    @property
+    def anthropic_api_key(self) -> str | None:
+        return os.getenv("ANTHROPIC_API_KEY") or None
 
 
 @lru_cache(maxsize=1)

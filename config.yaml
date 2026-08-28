@@ -55,6 +55,22 @@ salary:
   months_per_year: 12
 
 # ---------------------------------------------------------------------------
+# LLM parse/draft (Anthropic). Keys come from .env (ANTHROPIC_API_KEY).
+#   parse = Haiku (bulk), draft = Sonnet (tailored). Both tunable.
+#   engine: auto  -> use the LLM when a key is present, else the offline
+#                    heuristic parser (regex-based; no key, no billing).
+#           llm   -> require the LLM (errors without a key)
+#           heuristic -> always use the offline parser
+# ---------------------------------------------------------------------------
+llm:
+  parse_model: claude-haiku-4-5
+  draft_model: claude-sonnet-5
+  engine: auto
+  fetch_linked_pages: true      # resolve shortened links + fetch the JD page
+  request_timeout_seconds: 30
+  max_page_chars: 12000         # cap fetched JD text fed to the parser
+
+# ---------------------------------------------------------------------------
 # Fit score weights (0-100). Tune freely.
 # ---------------------------------------------------------------------------
 scoring:

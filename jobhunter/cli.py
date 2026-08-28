@@ -111,6 +111,40 @@ def ingest() -> None:
 
 
 @app.command()
+def parse() -> None:
+    """Parse un-parsed raw_posts into structured jobs (Haiku, or offline heuristic)."""
+    from .parse import run_parse
+
+    cfg = load_config()
+    result = run_parse(cfg)
+    console.print(
+        f"[green]Parse[/green] engine={result['engine']} — "
+        f"parsed [bold]{result['parsed']}[/bold], "
+        f"quarantined {result['quarantined']}."
+    )
+    if result["engine"] == "heuristic" and not cfg.anthropic_api_key:
+        console.print(
+            "[yellow]No ANTHROPIC_API_KEY[/yellow] — used the offline heuristic parser. "
+            "Set the key (or llm.engine=llm) to parse with Haiku."
+        )
+
+
+@app.command()
+def filter() -> None:  # noqa: A001 - CLI verb name mirrors the module
+    """Apply hard filter criteria; survivors -> passed_filter, rest -> filtered_out."""
+    from .filter import run_filter
+
+    cfg = load_config()
+    result = run_filter(cfg)
+    total = result["passed"] + result["rejected"]
+    rate = (100 * result["passed"] / total) if total else 0.0
+    console.print(
+        f"[green]Filter[/green] — passed [bold]{result['passed']}[/bold], "
+        f"rejected {result['rejected']} ({rate:.0f}% pass rate)."
+    )
+
+
+@app.command()
 def run(dry_run: bool = typer.Option(True, "--dry-run/--live", help="Dry-run writes to ./outbox, never sends.")) -> None:
     """One full cycle: ingest -> parse -> filter -> score -> draft -> (dry-run outbox)."""
     _pending("run")

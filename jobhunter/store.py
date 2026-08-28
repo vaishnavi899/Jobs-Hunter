@@ -57,6 +57,7 @@ class Base(DeclarativeBase):
 class JobStatus(str, enum.Enum):
     new = "new"                # freshly parsed
     filtered_out = "filtered_out"
+    passed_filter = "passed_filter"  # survived hard filter, awaiting score
     scored = "scored"          # passed filter, has a fit score
     drafted = "drafted"        # application drafted to ./outbox
     awaiting_approval = "awaiting_approval"

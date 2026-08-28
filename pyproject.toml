@@ -11,13 +11,14 @@ dependencies = [
     "pydantic>=2.7",
     "python-dotenv>=1.0",
     "rich>=13.7",
-    # Pipeline dependencies land in their own checkpoints:
-    #   anthropic  (parse/draft)      -> checkpoints 3-4
+    "anthropic>=0.40",       # parse = Haiku, draft = Sonnet (checkpoints 3-4)
+    "httpx>=0.27",           # resolve shortened links + fetch JD pages (checkpoint 3)
+    "beautifulsoup4>=4.12",  # extract text from fetched JD pages (checkpoint 3)
+    # Later-checkpoint dependencies:
     #   apscheduler (watch loop)      -> checkpoint 8
     #   playwright  (ATS adapters)    -> checkpoints 6-7
     #   google-api-python-client, google-auth-oauthlib (Gmail) -> checkpoint 5
     #   python-telegram-bot           -> checkpoint 8
-    #   httpx, beautifulsoup4         -> checkpoint 3 (link resolve + JD fetch)
 ]
 
 [project.scripts]
