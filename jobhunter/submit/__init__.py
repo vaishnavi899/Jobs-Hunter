@@ -169,6 +169,19 @@ def run_send(
                 bump("skipped_existing")
                 continue
 
+            if live:
+                # Safety rails gate the REAL send only: paused kill switch, daily
+                # caps, per-company/day cap, 30-day company dedupe. Any failing
+                # rail blocks the send (dry-run still writes the artifact).
+                from ..safety import send_allowed
+
+                ok_rails, reason = send_allowed(session, job, cfg)
+                if not ok_rails:
+                    app.status = ApplicationStatus.needs_human
+                    app.error = f"send blocked: {reason}"
+                    bump("blocked_by_rail")
+                    continue
+
             res = adapter.send(job, app, cfg) if live else adapter.dry_run(job, app, cfg)
             _record(app, res, now)
             bump(res.action)

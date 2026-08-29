@@ -221,9 +221,21 @@ def run(dry_run: bool = typer.Option(True, "--dry-run/--live", help="Dry-run wri
 
 
 @app.command()
-def watch() -> None:
-    """Run the scheduler loop (poll every N minutes)."""
-    _pending("watch")
+def watch(once: bool = typer.Option(False, "--once", help="Run a single cycle and exit (no loop).")) -> None:
+    """Scheduler loop: run the full pipeline on an interval, DRY-RUN only (submits nothing)."""
+    from .watch import run_cycle
+    from .watch import watch as run_watch
+
+    cfg = load_config()
+    if once:
+        summary = run_cycle(cfg)
+        console.print(f"[green]Cycle done[/green] (dry-run, 0 submitted): {summary}")
+        return
+    console.print(
+        f"[green]watch[/green] — running the pipeline every "
+        f"{cfg.ingest.poll_interval_minutes}m (dry-run only). Ctrl-C to stop."
+    )
+    run_watch(cfg)
 
 
 @app.command()
@@ -289,9 +301,34 @@ def stats() -> None:
 
 
 @app.command()
-def undo(last: bool = typer.Option(False, "--last", help="Show exactly what went out last.")) -> None:
-    """Print the last send so you can follow up manually."""
-    _pending("undo")
+def undo(
+    last: bool = typer.Option(False, "--last", help="Revert the most recent send record(s)."),
+    count: int = typer.Option(1, "--count", "-n", help="How many recent records to revert."),
+) -> None:
+    """Reverse the most recent send record(s): remove ./outbox artifacts, un-mark the Application."""
+    from .undo import run_undo
+
+    if not last:
+        console.print("Use: [bold]jobhunter undo --last[/bold] [--count N]")
+        raise typer.Exit(1)
+    cfg = load_config()
+    report = run_undo(cfg, n=count)
+    if report["count"] == 0:
+        console.print("Nothing to undo — no send records with artifacts.")
+        return
+    for r in report["reverted"]:
+        console.print(
+            f"[green]Reverted[/green] app {r['application_id']} — "
+            f"{r['title']} @ {r['company']} ({r['channel']}); "
+            f"removed {len(r['removed_files'])} file(s); job back to 'scored'."
+        )
+        if r["was_real_send"]:
+            console.print(
+                f"[red]  ! this was a REAL send[/red] (ref {r['external_ref']}) — the "
+                f"recipient already has it; only the local record was reverted."
+            )
+    if not report["real_send_warning"]:
+        console.print("[dim]All reverted records were dry-run only — nothing had been sent.[/dim]")
 
 
 @app.command()

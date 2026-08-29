@@ -110,6 +110,7 @@ submission:
   auto_send_channels: []      # channels graduated to auto later (email, ...)
   delay_seconds_min: 30       # randomized inter-submission delay
   delay_seconds_max: 90
+  company_dedupe_days: 30     # never draft/apply to the same company twice within N days
 
 # ---------------------------------------------------------------------------
 # Daily caps.
@@ -117,6 +118,8 @@ submission:
 caps:
   emails_per_day: 25
   ats_submissions_per_day: 15
+  applications_per_day: 30      # global cap across all channels per day
+  per_company_per_day: 1
 
 # ---------------------------------------------------------------------------
 # Applicant signature block (used in email bodies). Personal contact details

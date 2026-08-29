@@ -319,8 +319,11 @@ def run_draft(cfg: Config | None = None, limit: int | None = None) -> dict:
     if resume is None:
         return {"drafted": 0, "engine": None, "error": "profile/resume.json not found"}
 
+    from .safety import company_engaged_recently, normalize_company
+
     drafter = get_drafter(cfg)
-    drafted = skipped = 0
+    drafted = skipped = deduped = 0
+    dedupe_days = cfg.submission.company_dedupe_days
     with get_session(cfg) as session:
         already = {a for (a,) in session.query(Application.job_id).all()}
         q = (
@@ -332,7 +335,19 @@ def run_draft(cfg: Config | None = None, limit: int | None = None) -> dict:
         if limit is not None:
             jobs = jobs[:limit]
 
+        engaged: set[str] = set()  # companies drafted within THIS run
         for job in jobs:
+            key = normalize_company(job.company)
+            # Per-company 30-day dedupe: never draft a second job of the same
+            # company (this run, or an earlier one within the window).
+            if key and (
+                key in engaged
+                or company_engaged_recently(session, job.company, dedupe_days, exclude_job_id=job.id)
+            ):
+                job.status = JobStatus.skipped
+                job.filter_reason = f"company dedupe: {job.company} engaged within {dedupe_days}d"
+                deduped += 1
+                continue
             jd_text = job.raw_post.content if job.raw_post else ""
             try:
                 d = drafter.draft(job, jd_text, resume)
@@ -353,7 +368,10 @@ def run_draft(cfg: Config | None = None, limit: int | None = None) -> dict:
                 )
             )
             job.status = JobStatus.drafted
+            if key:
+                engaged.add(key)
             drafted += 1
         session.commit()
 
-    return {"drafted": drafted, "skipped": skipped, "engine": drafter.name}
+    return {"drafted": drafted, "skipped": skipped, "deduped": deduped,
+            "engine": drafter.name}

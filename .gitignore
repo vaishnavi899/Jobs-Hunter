@@ -7,6 +7,7 @@ profile/
 *.db-shm
 outbox/
 screenshots/
+logs/
 .auth/
 
 # The original build-spec prompt (contains personal contact details)

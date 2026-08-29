@@ -80,11 +80,15 @@ class SubmissionConfig(BaseModel):
     # bundled local form fixtures instead of the live posting URL — a safe
     # offline demo of the fill + screenshot flow. Default false = real URLs.
     ats_demo_fixtures: bool = False
+    # Never draft/apply to the same company again within this many days.
+    company_dedupe_days: int = 30
 
 
 class CapsConfig(BaseModel):
     emails_per_day: int = 25
     ats_submissions_per_day: int = 15
+    applications_per_day: int = 30   # global cap across all channels
+    per_company_per_day: int = 1
 
 
 class SignatureConfig(BaseModel):

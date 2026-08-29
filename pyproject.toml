@@ -12,11 +12,9 @@ dependencies = [
     "python-dotenv>=1.0",
     "rich>=13.7",
     "anthropic>=0.40",       # parse = Haiku, draft = Sonnet (checkpoints 3-4)
-    "httpx>=0.27",           # resolve shortened links + fetch JD pages (checkpoint 3)
+    "httpx>=0.27",           # link resolve + JD fetch (cp3); Telegram Bot API (cp8)
     "beautifulsoup4>=4.12",  # extract text from fetched JD pages (checkpoint 3)
-    # Later-checkpoint dependencies:
-    #   apscheduler (watch loop)      -> checkpoint 8
-    #   python-telegram-bot           -> checkpoint 8
+    "apscheduler>=3.10",     # the `watch` scheduler loop (checkpoint 8)
 ]
 
 [project.optional-dependencies]
