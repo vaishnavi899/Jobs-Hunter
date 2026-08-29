@@ -21,6 +21,7 @@ Telegram) stay on your machine in `.env`, which is never committed.
 
 ```bash
 uv sync                          # base install — the whole pipeline runs offline with this alone
+uv sync --extra groq             # + OpenAI client, for the DEFAULT Groq LLM provider (free tier)
 uv sync --extra ats              # + Playwright, for the ATS adapters (Greenhouse/Lever/Ashby/Workable/generic)
 uv run playwright install chromium   # one-time browser download (only if you use --extra ats)
 uv sync --extra gmail            # + google client libs, only if you want real email sending
@@ -32,7 +33,8 @@ Then:
 1. Copy `.env.example` to `.env`. Everything below is **optional** — the tool
    runs fully offline with none of it (heuristic parser, template drafter, `.eml`
    files, no notifications):
-   - `ANTHROPIC_API_KEY` — enables Haiku parsing + Sonnet drafting (else offline heuristics).
+   - `GROQ_API_KEY` — the **default** LLM provider (free tier, get one at console.groq.com); needs `uv sync --extra groq`. Enables real parse + draft; else offline heuristics.
+   - `ANTHROPIC_API_KEY` — the switchable alternative provider (set `llm.provider: anthropic` in config.yaml to use it).
    - `GMAIL_OAUTH_CLIENT_SECRETS` / `GMAIL_TOKEN_PATH` — for real email sending (Desktop OAuth client, `gmail.send` scope). Put the client-secret JSON under `.auth/`.
    - `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` — notifications + `/pause` `/resume` `/status`. Without them, notifications no-op to `./logs/telegram.log`.
 2. Put your resume at `profile/resume.json` (drafting source) and

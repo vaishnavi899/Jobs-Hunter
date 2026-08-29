@@ -42,9 +42,29 @@ class SalaryConfig(BaseModel):
 
 
 class LLMConfig(BaseModel):
-    parse_model: str = "claude-haiku-4-5"
-    draft_model: str = "claude-sonnet-5"
-    engine: str = "auto"  # auto | llm | heuristic
+    # provider: groq (default, free tier) | anthropic | auto
+    #   groq      -> Groq's OpenAI-compatible API (GROQ_API_KEY)
+    #   anthropic -> Anthropic API (ANTHROPIC_API_KEY), kept switchable
+    #   auto      -> Groq if GROQ_API_KEY set, else Anthropic if its key set, else offline
+    provider: str = "groq"
+    # engine: auto -> use the resolved provider's LLM when its key is present,
+    #                 else the offline heuristic parser / template drafter.
+    engine: str = "auto"
+
+    # Active-provider models. Defaults are current Groq production ids, verified
+    # live against this account's /models endpoint: a small/fast model for bulk
+    # parse and the strongest general model for drafting. To change, pick an id
+    # your key exposes (list them: GET https://api.groq.com/openai/v1/models).
+    # Common alternatives if your account has the Llama family instead:
+    #   parse_model: llama-3.1-8b-instant   draft_model: llama-3.3-70b-versatile
+    parse_model: str = "openai/gpt-oss-20b"
+    draft_model: str = "openai/gpt-oss-120b"
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+
+    # The switchable Anthropic path (used only when provider=anthropic).
+    anthropic_parse_model: str = "claude-haiku-4-5"
+    anthropic_draft_model: str = "claude-sonnet-5"
+
     fetch_linked_pages: bool = True
     request_timeout_seconds: int = 30
     max_page_chars: int = 12000
@@ -124,6 +144,29 @@ class Config(BaseModel):
     @property
     def anthropic_api_key(self) -> str | None:
         return os.getenv("ANTHROPIC_API_KEY") or None
+
+    @property
+    def groq_api_key(self) -> str | None:
+        return os.getenv("GROQ_API_KEY") or None
+
+    @property
+    def resolved_provider(self) -> str | None:
+        """Which LLM provider is actually usable now, or None (offline).
+
+        Honors llm.provider, falling back to offline when the selected
+        provider's key is absent.
+        """
+        p = self.llm.provider
+        if p == "groq":
+            return "groq" if self.groq_api_key else None
+        if p == "anthropic":
+            return "anthropic" if self.anthropic_api_key else None
+        # auto
+        if self.groq_api_key:
+            return "groq"
+        if self.anthropic_api_key:
+            return "anthropic"
+        return None
 
 
 RESUME_PATH = PROJECT_ROOT / "profile" / "resume.json"

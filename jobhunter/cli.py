@@ -112,20 +112,23 @@ def ingest() -> None:
 
 @app.command()
 def parse() -> None:
-    """Parse un-parsed raw_posts into structured jobs (Haiku, or offline heuristic)."""
+    """Parse un-parsed raw_posts into structured jobs (LLM provider, or offline heuristic)."""
     from .parse import run_parse
 
     cfg = load_config()
     result = run_parse(cfg)
+    degraded = result.get("degraded_to_offline", 0)
     console.print(
-        f"[green]Parse[/green] engine={result['engine']} — "
+        f"[green]Parse[/green] engine={result['engine']} (provider={cfg.llm.provider}) — "
         f"parsed [bold]{result['parsed']}[/bold], "
-        f"quarantined {result['quarantined']}."
+        f"quarantined {result['quarantined']}"
+        + (f", degraded-to-offline {degraded}" if degraded else "") + "."
     )
-    if result["engine"] == "heuristic" and not cfg.anthropic_api_key:
+    if result["engine"] == "heuristic" and cfg.resolved_provider is None:
+        key = "GROQ_API_KEY" if cfg.llm.provider in ("groq", "auto") else "ANTHROPIC_API_KEY"
         console.print(
-            "[yellow]No ANTHROPIC_API_KEY[/yellow] — used the offline heuristic parser. "
-            "Set the key (or llm.engine=llm) to parse with Haiku."
+            f"[yellow]No {key}[/yellow] — used the offline heuristic parser (no billing). "
+            f"Set the key (and `uv sync --extra groq` for Groq) to parse with the LLM."
         )
 
 
@@ -158,7 +161,7 @@ def score() -> None:
 
 @app.command()
 def draft(limit: int = typer.Option(None, "--limit", "-n", help="Draft only the top N by fit score.")) -> None:
-    """Draft tailored applications for scored jobs (Sonnet, or offline template)."""
+    """Draft tailored applications for scored jobs (LLM provider, or offline template)."""
     from .draft import run_draft
 
     cfg = load_config()
@@ -166,15 +169,18 @@ def draft(limit: int = typer.Option(None, "--limit", "-n", help="Draft only the 
     if result.get("error"):
         console.print(f"[red]{result['error']}[/red]")
         raise typer.Exit(1)
+    degraded = result.get("degraded_to_offline", 0)
     console.print(
-        f"[green]Draft[/green] engine={result['engine']} — "
-        f"drafted [bold]{result['drafted']}[/bold], skipped {result['skipped']}. "
-        "Nothing sent (drafts cached as dry-run)."
+        f"[green]Draft[/green] engine={result['engine']} (provider={cfg.llm.provider}) — "
+        f"drafted [bold]{result['drafted']}[/bold], skipped {result['skipped']}"
+        + (f", degraded-to-offline {degraded}" if degraded else "")
+        + ". Nothing sent (drafts cached as dry-run)."
     )
-    if result["engine"] == "template" and not cfg.anthropic_api_key:
+    if result["engine"] == "template" and cfg.resolved_provider is None:
+        key = "GROQ_API_KEY" if cfg.llm.provider in ("groq", "auto") else "ANTHROPIC_API_KEY"
         console.print(
-            "[yellow]No ANTHROPIC_API_KEY[/yellow] — used the offline template drafter. "
-            "Set the key (or llm.engine=llm) to draft with Sonnet."
+            f"[yellow]No {key}[/yellow] — used the offline template drafter (no billing). "
+            f"Set the key (and `uv sync --extra groq` for Groq) to draft with the LLM."
         )
 
 

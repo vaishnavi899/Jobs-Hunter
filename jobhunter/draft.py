@@ -230,8 +230,110 @@ class TemplateDrafter:
         }
 
 
-class LLMDrafter:
-    name = "llm"
+# The drafter contract is provider-agnostic: every LLM drafter returns
+# {subject, cover_note, resume_bullets}; the outreach-template STRUCTURE (opener,
+# skills line, JD hook, relocation rule, availability, then the appended link
+# block + close via assemble()) is enforced by this one shared prompt — the
+# backend model is the only thing that changes between providers.
+DRAFT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "subject": {"type": "string"},
+        "cover_note": {"type": "string"},
+        "resume_bullets": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["subject", "cover_note", "resume_bullets"],
+}
+
+
+def build_draft_prompt(job: Job, jd_text: str, resume: dict) -> str:
+    import json
+
+    relocation = (
+        f"This role is onsite in {job.location}, outside her Delhi NCR base — "
+        f"include one sentence that she is glad to relocate and is open to any "
+        f"location in India."
+        if needs_relocation(job)
+        else "Do NOT mention relocation."
+    )
+    return (
+        "Write the PROSE of a tailored outreach message for this candidate, "
+        "following her template EXACTLY in this order:\n"
+        f"1. Opener (use verbatim): \"{OPENER}\"\n"
+        f"2. Skills line (use verbatim or lightly adapted): \"{SKILLS_LINE}\"\n"
+        "3. ONE custom paragraph: a JD-specific hook tied to what THIS role "
+        "does or a concrete requirement she matches — reference something "
+        "specific from the job. Do NOT address a person; do NOT write 'I came "
+        "across your profile'. No filler, no 'I am writing to express my "
+        "interest.'\n"
+        f"4. {relocation}\n"
+        "5. State availability as 'available in 30 days' — never imply she can "
+        "start immediately.\n"
+        "Keep the PROSE (steps 1-5) between 150 and 200 words. Do NOT write a "
+        "greeting line, the resume/job/email link block, or a sign-off — those "
+        "are added separately. Return a single JSON object with keys: subject "
+        "(string), cover_note (the prose, string), resume_bullets (array of her "
+        "top-6 resume bullets, most relevant first).\n\n"
+        f"RESUME (JSON):\n{json.dumps(resume)}\n\n"
+        f"JOB (company={job.company}, title={job.title}, location={job.location}, "
+        f"remote={job.remote}):\n{jd_text}"
+    )
+
+
+def _assemble_from_llm(data: dict, job: Job, cfg: Config, resume: dict) -> dict:
+    prose = "Hi team,\n\n" + data["cover_note"].strip()
+    return {
+        "subject": data["subject"],
+        "body": assemble(prose, job, cfg, resume),
+        "resume_bullets": data.get("resume_bullets", []),
+    }
+
+
+class GroqDrafter:
+    """Draft via Groq's OpenAI-compatible API (JSON mode). Same prompt/rules as
+    the Anthropic path; only the model changes. Retry once, then raise so
+    run_draft can degrade this item to the offline template drafter."""
+
+    name = "groq"
+
+    def __init__(self, cfg: Config):
+        self.cfg = cfg
+        from openai import OpenAI  # optional dep (uv sync --extra groq)
+
+        self.client = OpenAI(
+            base_url=cfg.llm.groq_base_url,
+            api_key=cfg.groq_api_key,
+            timeout=cfg.llm.request_timeout_seconds,
+        )
+
+    def draft(self, job: Job, jd_text: str, resume: dict) -> dict:
+        import json
+
+        prompt = build_draft_prompt(job, jd_text, resume)
+        last: Exception | None = None
+        for _attempt in range(2):
+            resp = self.client.chat.completions.create(
+                model=self.cfg.llm.draft_model,
+                temperature=0.4,
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content": "You output only a valid JSON object with keys subject, cover_note, resume_bullets."},
+                    {"role": "user", "content": prompt},
+                ],
+            )
+            content = resp.choices[0].message.content or ""
+            try:
+                return _assemble_from_llm(json.loads(content), job, self.cfg, resume)
+            except (json.JSONDecodeError, KeyError) as exc:
+                last = exc
+        raise ValueError(f"Groq returned invalid draft JSON after retry: {last}")
+
+
+class AnthropicDrafter:
+    """Draft via Anthropic structured outputs (switchable; off by default)."""
+
+    name = "anthropic"
 
     def __init__(self, cfg: Config):
         self.cfg = cfg
@@ -239,73 +341,54 @@ class LLMDrafter:
 
         self.client = anthropic.Anthropic(api_key=cfg.anthropic_api_key)
 
-    _SCHEMA = {
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "subject": {"type": "string"},
-            "cover_note": {"type": "string"},
-            "resume_bullets": {"type": "array", "items": {"type": "string"}},
-        },
-        "required": ["subject", "cover_note", "resume_bullets"],
-    }
-
     def draft(self, job: Job, jd_text: str, resume: dict) -> dict:
         import json
 
-        relocation = (
-            f"This role is onsite in {job.location}, outside her Delhi NCR base — "
-            f"include one sentence that she is glad to relocate and is open to any "
-            f"location in India."
-            if needs_relocation(job)
-            else "Do NOT mention relocation."
-        )
-        prompt = (
-            "Write the PROSE of a tailored outreach message for this candidate, "
-            "following her template EXACTLY in this order:\n"
-            f"1. Opener (use verbatim): \"{OPENER}\"\n"
-            f"2. Skills line (use verbatim or lightly adapted): \"{SKILLS_LINE}\"\n"
-            "3. ONE custom paragraph: a JD-specific hook tied to what THIS role "
-            "does or a concrete requirement she matches — reference something "
-            "specific from the job. Do NOT address a person; do NOT write 'I came "
-            "across your profile'. No filler, no 'I am writing to express my "
-            "interest.'\n"
-            f"4. {relocation}\n"
-            "5. State availability as 'available in 30 days' — never imply she can "
-            "start immediately.\n"
-            "Keep the PROSE (steps 1-5) between 150 and 200 words. Do NOT write a "
-            "greeting line, the resume/job/email link block, or a sign-off — those "
-            "are added separately. Also return a subject line and a reordered "
-            "top-6 list of her resume bullets, most relevant first.\n\n"
-            f"RESUME (JSON):\n{json.dumps(resume)}\n\n"
-            f"JOB (company={job.company}, title={job.title}, location={job.location}, "
-            f"remote={job.remote}):\n{jd_text}"
-        )
         resp = self.client.messages.create(
-            model=self.cfg.llm.draft_model,
+            model=self.cfg.llm.anthropic_draft_model,
             max_tokens=1500,
-            output_config={"format": {"type": "json_schema", "schema": self._SCHEMA}},
-            messages=[{"role": "user", "content": prompt}],
+            output_config={"format": {"type": "json_schema", "schema": DRAFT_SCHEMA}},
+            messages=[{"role": "user", "content": build_draft_prompt(job, jd_text, resume)}],
         )
         text = next((b.text for b in resp.content if b.type == "text"), "")
-        data = json.loads(text)
-        prose = "Hi team,\n\n" + data["cover_note"].strip()
-        return {
-            "subject": data["subject"],
-            "body": assemble(prose, job, self.cfg, resume),
-            "resume_bullets": data["resume_bullets"],
-        }
+        return _assemble_from_llm(json.loads(text), job, self.cfg, resume)
+
+
+def _make_drafter(provider: str, cfg: Config):
+    """Construct a provider drafter, or None if its client library is missing."""
+    try:
+        return GroqDrafter(cfg) if provider == "groq" else AnthropicDrafter(cfg)
+    except Exception:  # noqa: BLE001 - missing/broken client lib -> caller degrades
+        return None
 
 
 def get_drafter(cfg: Config):
+    """Pick the drafter: offline template, or the resolved provider's LLM.
+
+    Missing provider client libs never crash: `engine: auto` degrades to the
+    offline template drafter; `engine: llm` raises a clear message.
+    """
     engine = cfg.llm.engine
     if engine == "heuristic":  # heuristic parse -> template draft (offline pair)
         return TemplateDrafter(cfg)
+    provider = cfg.resolved_provider
     if engine == "llm":
-        if not cfg.anthropic_api_key:
-            raise RuntimeError("llm.engine=llm but ANTHROPIC_API_KEY is not set")
-        return LLMDrafter(cfg)
-    return LLMDrafter(cfg) if cfg.anthropic_api_key else TemplateDrafter(cfg)
+        if provider is None:
+            raise RuntimeError(
+                "llm.engine=llm but no provider key set (GROQ_API_KEY or ANTHROPIC_API_KEY)"
+            )
+        d = _make_drafter(provider, cfg)
+        if d is None:
+            raise RuntimeError(
+                f"provider '{provider}' selected but its client is not installed "
+                f"(uv sync --extra {'groq' if provider == 'groq' else 'anthropic'})"
+            )
+        return d
+    if provider in ("groq", "anthropic"):
+        d = _make_drafter(provider, cfg)
+        if d is not None:
+            return d
+    return TemplateDrafter(cfg)
 
 
 def run_draft(cfg: Config | None = None, limit: int | None = None) -> dict:
@@ -322,7 +405,9 @@ def run_draft(cfg: Config | None = None, limit: int | None = None) -> dict:
     from .safety import company_engaged_recently, normalize_company
 
     drafter = get_drafter(cfg)
-    drafted = skipped = deduped = 0
+    # The offline template drafter is always available as the per-item fallback.
+    template = drafter if isinstance(drafter, TemplateDrafter) else TemplateDrafter(cfg)
+    drafted = skipped = deduped = degraded = 0
     dedupe_days = cfg.submission.company_dedupe_days
     with get_session(cfg) as session:
         already = {a for (a,) in session.query(Application.job_id).all()}
@@ -351,11 +436,20 @@ def run_draft(cfg: Config | None = None, limit: int | None = None) -> dict:
             jd_text = job.raw_post.content if job.raw_post else ""
             try:
                 d = drafter.draft(job, jd_text, resume)
-            except Exception as exc:  # noqa: BLE001 - never crash the batch
-                skipped += 1
-                job.status = JobStatus.needs_human
-                job.filter_reason = f"draft failed: {type(exc).__name__}: {exc}"
-                continue
+            except Exception:  # noqa: BLE001 - provider failure -> degrade this item
+                if drafter is not template:
+                    try:
+                        d = template.draft(job, jd_text, resume)
+                        degraded += 1
+                    except Exception as exc:  # noqa: BLE001 - never crash the batch
+                        skipped += 1
+                        job.status = JobStatus.needs_human
+                        job.filter_reason = f"draft failed: {type(exc).__name__}: {exc}"
+                        continue
+                else:
+                    skipped += 1
+                    job.status = JobStatus.needs_human
+                    continue
             session.add(
                 Application(
                     job_id=job.id,
@@ -374,4 +468,4 @@ def run_draft(cfg: Config | None = None, limit: int | None = None) -> dict:
         session.commit()
 
     return {"drafted": drafted, "skipped": skipped, "deduped": deduped,
-            "engine": drafter.name}
+            "degraded_to_offline": degraded, "engine": drafter.name}

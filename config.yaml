@@ -55,17 +55,35 @@ salary:
   months_per_year: 12
 
 # ---------------------------------------------------------------------------
-# LLM parse/draft (Anthropic). Keys come from .env (ANTHROPIC_API_KEY).
-#   parse = Haiku (bulk), draft = Sonnet (tailored). Both tunable.
-#   engine: auto  -> use the LLM when a key is present, else the offline
-#                    heuristic parser (regex-based; no key, no billing).
-#           llm   -> require the LLM (errors without a key)
-#           heuristic -> always use the offline parser
+# LLM parse/draft. Provider is selectable; the pipeline code never changes.
+#   provider: groq (default, FREE tier) | anthropic (switchable) | auto
+#     groq      -> Groq's OpenAI-compatible API; key = GROQ_API_KEY;
+#                  needs the optional client: uv sync --extra groq
+#     anthropic -> Anthropic API; key = ANTHROPIC_API_KEY
+#     auto      -> Groq if its key is set, else Anthropic if its key is set,
+#                  else offline
+#   engine: auto -> use the resolved provider's LLM when its key is present,
+#                   else the offline heuristic parser / template drafter
+#                   (regex/deterministic; no key, no billing, never crashes).
+#           llm       -> require an LLM provider (errors if no key)
+#           heuristic -> always use the offline path
+#   parse_model / draft_model are the ACTIVE provider's model ids. Defaults are
+#   current Groq production ids (GPT-OSS), verified live against the /models
+#   endpoint: a small/fast model for bulk parse, the strongest for drafting.
+#   List the ids YOUR key exposes: GET https://api.groq.com/openai/v1/models
+#   (they vary by account). If your account has the Llama family instead, use
+#   parse_model: llama-3.1-8b-instant / draft_model: llama-3.3-70b-versatile.
+#   A model your key can't access simply degrades that item to offline.
 # ---------------------------------------------------------------------------
 llm:
-  parse_model: claude-haiku-4-5
-  draft_model: claude-sonnet-5
+  provider: groq
   engine: auto
+  parse_model: openai/gpt-oss-20b          # Groq: small/fast, bulk parse
+  draft_model: openai/gpt-oss-120b         # Groq: strongest, drafting
+  groq_base_url: https://api.groq.com/openai/v1
+  # Used only when provider: anthropic
+  anthropic_parse_model: claude-haiku-4-5
+  anthropic_draft_model: claude-sonnet-5
   fetch_linked_pages: true      # resolve shortened links + fetch the JD page
   request_timeout_seconds: 30
   max_page_chars: 12000         # cap fetched JD text fed to the parser

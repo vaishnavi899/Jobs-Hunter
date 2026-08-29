@@ -18,6 +18,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Groq is the DEFAULT LLM provider (free tier), via its OpenAI-compatible API.
+# Optional so the base install stays dependency-light and runs fully offline.
+# Enable with: uv sync --extra groq   (then set GROQ_API_KEY in .env)
+groq = ["openai>=1.30"]
 # ATS adapters (Greenhouse/Lever) drive a headless browser. Optional so the
 # rest of the pipeline installs and runs with no browser. Enable with:
 #   uv sync --extra ats   (then: playwright install chromium)

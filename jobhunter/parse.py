@@ -217,49 +217,109 @@ def resolve_and_fetch(url: str, cfg: Config) -> tuple[str, str]:
 
 
 # --------------------------------------------------------------------------- #
-# Parsers                                                                       #
+# Parsers — one interface, provider chosen by config (Groq default / Anthropic  #
+# switchable / offline heuristic). The prompt, schema, and link-fetch are       #
+# provider-agnostic; only the API call differs.                                 #
 # --------------------------------------------------------------------------- #
-class LLMParser:
-    """One Haiku call per post, returning the strict schema. Retry once."""
+_PARSE_FIELDS = (
+    "company (string|null), title (string|null), role_tier (1|2|3|null), "
+    "employment_type (one of fulltime|internship|contract|unknown), "
+    "salary_min_inr (number|null), salary_max_inr (number|null), "
+    "salary_unknown (boolean), experience_required_years (number|null), "
+    "location (string|null), remote (boolean|null), apply_method (one of "
+    "ats_greenhouse|ats_lever|ats_ashby|ats_workable|ats_workday|email|form|dm|unknown), "
+    "apply_target (string|null), tech_stack (array of strings), "
+    "posted_by_handle (string|null), source_url (string|null), confidence (number 0..1)"
+)
 
-    name = "llm"
+
+def build_parse_prompt(raw: RawPost, page_text: str) -> str:
+    return (
+        "Extract a structured job posting from this hiring post. Respond with a "
+        f"single JSON object with EXACTLY these keys: {_PARSE_FIELDS}.\n"
+        "Salary fields must be ANNUAL INR numbers (multiply monthly stipends by "
+        "12; convert $ amounts at ~84 INR). If compensation is not stated, set "
+        "salary_unknown=true and leave the numbers null. role_tier: 1 for "
+        "SDE/Software Engineer/AI Engineer/Forward Deployed Engineer, 2 for "
+        "adjacent engineering roles, 3 for product roles, null if unclear.\n\n"
+        f"POST (@{raw.posted_by_handle or 'unknown'}):\n{raw.content}\n\n"
+        f"LINKED PAGE:\n{page_text or '(none)'}"
+    )
+
+
+def _resolve_page(raw: RawPost, cfg: Config) -> tuple[str, str]:
+    if cfg.llm.fetch_linked_pages:
+        urls = _URL_RE.findall(raw.content)
+        if urls:
+            return resolve_and_fetch(urls[0], cfg)
+    return "", ""
+
+
+def _finish(data: dict, raw: RawPost, page_url: str) -> dict:
+    data.setdefault("source_url", page_url or raw.source_url)
+    data.setdefault("posted_by_handle", raw.posted_by_handle)
+    return data
+
+
+class GroqParser:
+    """Parse via Groq's OpenAI-compatible API (JSON mode). Retry once, then raise
+    so run_parse can degrade this item to the offline heuristic."""
+
+    name = "groq"
 
     def __init__(self, cfg: Config):
         self.cfg = cfg
-        import anthropic  # imported lazily so heuristic runs without the dep
+        from openai import OpenAI  # optional dep (uv sync --extra groq)
 
-        self.client = anthropic.Anthropic(api_key=cfg.anthropic_api_key)
-
-    def _build_prompt(self, raw: RawPost, page_text: str) -> str:
-        return (
-            "Extract a structured job posting from this hiring post. "
-            "Salary fields must be ANNUAL INR numbers (multiply monthly stipends "
-            "by 12; convert $ at the given rate). If compensation is not stated, "
-            "set salary_unknown=true and leave the numbers null. role_tier: 1 for "
-            "SDE/Software Engineer/AI Engineer/Forward Deployed Engineer, 2 for "
-            "adjacent engineering roles, 3 for product roles, null if unclear.\n\n"
-            f"POST (@{raw.posted_by_handle or 'unknown'}):\n{raw.content}\n\n"
-            f"LINKED PAGE:\n{page_text or '(none)'}"
+        self.client = OpenAI(
+            base_url=cfg.llm.groq_base_url,
+            api_key=cfg.groq_api_key,
+            timeout=cfg.llm.request_timeout_seconds,
         )
 
     def parse(self, raw: RawPost) -> dict:
-        page_url, page_text = "", ""
-        if self.cfg.llm.fetch_linked_pages:
-            urls = _URL_RE.findall(raw.content)
-            if urls:
-                page_url, page_text = resolve_and_fetch(urls[0], self.cfg)
+        page_url, page_text = _resolve_page(raw, self.cfg)
+        prompt = build_parse_prompt(raw, page_text)
+        last: Exception | None = None
+        for _attempt in range(2):  # one retry on malformed JSON
+            resp = self.client.chat.completions.create(
+                model=self.cfg.llm.parse_model,
+                temperature=0,
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content": "You output only a valid JSON object with the requested keys."},
+                    {"role": "user", "content": prompt},
+                ],
+            )
+            content = resp.choices[0].message.content or ""
+            try:
+                return _finish(json.loads(content), raw, page_url)
+            except json.JSONDecodeError as exc:
+                last = exc
+        raise ValueError(f"Groq returned invalid JSON after retry: {last}")
 
+
+class AnthropicParser:
+    """Parse via Anthropic structured outputs (switchable; off by default)."""
+
+    name = "anthropic"
+
+    def __init__(self, cfg: Config):
+        self.cfg = cfg
+        import anthropic  # imported lazily
+
+        self.client = anthropic.Anthropic(api_key=cfg.anthropic_api_key)
+
+    def parse(self, raw: RawPost) -> dict:
+        page_url, page_text = _resolve_page(raw, self.cfg)
         resp = self.client.messages.create(
-            model=self.cfg.llm.parse_model,
+            model=self.cfg.llm.anthropic_parse_model,
             max_tokens=1024,
             output_config={"format": {"type": "json_schema", "schema": PARSE_SCHEMA}},
-            messages=[{"role": "user", "content": self._build_prompt(raw, page_text)}],
+            messages=[{"role": "user", "content": build_parse_prompt(raw, page_text)}],
         )
         text = next((b.text for b in resp.content if b.type == "text"), "")
-        data = json.loads(text)  # output_config guarantees valid JSON on success
-        data.setdefault("source_url", page_url or raw.source_url)
-        data.setdefault("posted_by_handle", raw.posted_by_handle)
-        return data
+        return _finish(json.loads(text), raw, page_url)
 
 
 class HeuristicParser:
@@ -377,16 +437,42 @@ class HeuristicParser:
         return None
 
 
+def _make_parser(provider: str, cfg: Config):
+    """Construct a provider parser, or None if its client library is missing."""
+    try:
+        return GroqParser(cfg) if provider == "groq" else AnthropicParser(cfg)
+    except Exception:  # noqa: BLE001 - missing/broken client lib -> caller degrades
+        return None
+
+
 def get_parser(cfg: Config):
+    """Pick the parser: offline heuristic, or the resolved provider's LLM.
+
+    Missing provider client libs never crash: `engine: auto` degrades to the
+    offline heuristic; `engine: llm` raises a clear message.
+    """
     engine = cfg.llm.engine
     if engine == "heuristic":
         return HeuristicParser(cfg)
+    provider = cfg.resolved_provider
     if engine == "llm":
-        if not cfg.anthropic_api_key:
-            raise RuntimeError("llm.engine=llm but ANTHROPIC_API_KEY is not set")
-        return LLMParser(cfg)
-    # auto
-    return LLMParser(cfg) if cfg.anthropic_api_key else HeuristicParser(cfg)
+        if provider is None:
+            raise RuntimeError(
+                "llm.engine=llm but no provider key set (GROQ_API_KEY or ANTHROPIC_API_KEY)"
+            )
+        p = _make_parser(provider, cfg)
+        if p is None:
+            raise RuntimeError(
+                f"provider '{provider}' selected but its client is not installed "
+                f"(uv sync --extra {'groq' if provider == 'groq' else 'anthropic'})"
+            )
+        return p
+    # auto: resolved provider if usable, else offline
+    if provider in ("groq", "anthropic"):
+        p = _make_parser(provider, cfg)
+        if p is not None:
+            return p
+    return HeuristicParser(cfg)
 
 
 # --------------------------------------------------------------------------- #
@@ -436,7 +522,15 @@ def run_parse(cfg: Config | None = None) -> dict:
     cfg = cfg or load_config()
     init_db(cfg)
     parser = get_parser(cfg)
-    parsed = quarantined = 0
+    # The offline heuristic is always available as the per-item fallback.
+    heuristic = parser if isinstance(parser, HeuristicParser) else HeuristicParser(cfg)
+    parsed = quarantined = degraded = 0
+
+    def _try(p, raw):
+        try:
+            return p.parse(raw), None
+        except Exception as exc:  # noqa: BLE001 - never crash the batch
+            return None, f"{type(exc).__name__}: {exc}"
 
     with get_session(cfg) as session:
         done_ids = {r for (r,) in session.query(Job.raw_post_id).all()}
@@ -448,17 +542,15 @@ def run_parse(cfg: Config | None = None) -> dict:
                  if p.id not in skip]
 
         for raw in posts:
-            data = None
-            last_err = ""
-            for _attempt in range(2):  # one retry on malformed output
-                try:
-                    data = parser.parse(raw)
-                    break
-                except Exception as exc:  # noqa: BLE001 - never crash the batch
-                    last_err = f"{type(exc).__name__}: {exc}"
-                    data = None
+            data, err = _try(parser, raw)
+            if data is None and parser is not heuristic:
+                # Provider failed (rate limit / HTTP / malformed / no client) ->
+                # degrade THIS item to the offline heuristic. Never hard-fail.
+                data, _ = _try(heuristic, raw)
+                if data is not None:
+                    degraded += 1
             if data is None:
-                session.add(ParseFailure(raw_post_id=raw.id, error=last_err))
+                session.add(ParseFailure(raw_post_id=raw.id, error=err))
                 quarantined += 1
                 continue
             session.add(build_job(raw, data))
@@ -466,4 +558,4 @@ def run_parse(cfg: Config | None = None) -> dict:
         session.commit()
 
     return {"parsed": parsed, "quarantined": quarantined,
-            "engine": parser.name}
+            "degraded_to_offline": degraded, "engine": parser.name}
