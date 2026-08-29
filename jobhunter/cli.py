@@ -180,34 +180,38 @@ def draft(limit: int = typer.Option(None, "--limit", "-n", help="Draft only the 
 
 @app.command()
 def send(
-    do_send: bool = typer.Option(False, "--send", help="Arm the real Gmail send path (still requires --i-confirm)."),
+    do_send: bool = typer.Option(False, "--send", help="Arm the real send/submit path (still requires --i-confirm)."),
     i_confirm: bool = typer.Option(False, "--i-confirm", help="Second confirmation required alongside --send."),
+    demo_fixtures: bool = typer.Option(False, "--demo-fixtures", help="ATS adapters navigate bundled local form fixtures (safe offline demo)."),
     limit: int = typer.Option(None, "--limit", "-n", help="Process only the top N drafts by fit score."),
 ) -> None:
-    """Write ready-to-send .eml files to ./outbox/ for drafted jobs. Sends NOTHING by default.
+    """Prepare applications to ./outbox/ per channel. Sends/submits NOTHING by default.
 
-    Default: dry-run — one .eml per drafted job, nothing transmitted.
-    Real send is gated: you must pass BOTH --send AND --i-confirm, and even
-    then a message only leaves the machine when the job has a real recipient
-    and Gmail OAuth credentials exist; otherwise it falls back to a .eml.
+    Per drafted job, routed by channel: email -> ready-to-send .eml;
+    Greenhouse/Lever -> field-map .json + review screenshot (Playwright).
+    Real send/submit is gated: pass BOTH --send AND --i-confirm, and even then a
+    message/application only leaves the machine when its own validation passes
+    (email: a recipient; ATS: zero needs-review fields) and credentials/browsers
+    exist — otherwise it falls back to the dry-run artifact.
     """
+    import os
+
     from .submit import run_send
 
+    if demo_fixtures:
+        os.environ["JOBHUNTER_ATS_FIXTURES"] = "1"
     cfg = load_config()
     if do_send and not i_confirm:
         console.print("[red]Refusing to send:[/red] --send requires --i-confirm. Dry-running instead.")
         do_send = False
     result = run_send(cfg, do_send=do_send, confirm=i_confirm, limit=limit)
     c = result["counts"]
+    parts = ", ".join(f"{k}={v}" for k, v in sorted(c.items()))
     console.print(
-        f"[green]Send ({'LIVE' if result['live'] else 'dry-run'})[/green] — "
-        f"wrote [bold]{c['written']}[/bold] .eml to {result['outbox']}, "
-        f"{c['sent']} sent, {c['skipped_existing']} already-written, "
-        f"{c['skipped_sent']} already-sent, {c['needs_auth']} needs-auth, "
-        f"{c['needs_human']} no-recipient, {c['failed']} failed."
+        f"[green]Send ({'LIVE' if result['live'] else 'dry-run'})[/green] to {result['outbox']} — {parts or 'nothing to do'}"
     )
     if not result["live"]:
-        console.print("[dim]Nothing was transmitted. Real send needs `--send --i-confirm` + credentials.[/dim]")
+        console.print("[dim]Nothing was transmitted/submitted. Real send needs `--send --i-confirm` + credentials/browser.[/dim]")
 
 
 @app.command()

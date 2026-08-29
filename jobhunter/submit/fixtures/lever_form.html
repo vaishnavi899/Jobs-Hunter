@@ -1,0 +1,34 @@
+<!doctype html>
+<!--
+  Local approximation of a Lever application form, for offline demo and testing
+  of the field-mapping + pre-submit validation flow. Field names mirror the
+  real Lever-hosted form (single full-name field, email, phone, a resume file
+  input, and an "additional information" textarea). Not affiliated with Lever.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Apply — Software Engineer (Lever)</title>
+  <style>
+    body { font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 620px; margin: 30px auto; color:#2b2b2b; }
+    h2 { font-size: 20px; } .posting-headline { color:#6f42c1; font-size:14px; }
+    .application-field { margin:14px 0; }
+    input, textarea { width:100%; padding:9px; border:1px solid #d0d0d0; border-radius:3px; box-sizing:border-box; }
+    .template-btn-submit { margin-top:16px; background:#6f42c1; color:#fff; border:none; padding:11px 22px; border-radius:3px; font-size:15px; cursor:pointer; }
+    .req::after { content:" *"; color:#d00; }
+  </style>
+</head>
+<body>
+  <div class="posting-headline">Lever</div>
+  <h2>Submit your application</h2>
+  <h3 style="font-weight:normal;color:#555;font-size:14px;">SDE · Bengaluru</h3>
+  <form>
+    <div class="application-field"><label class="req">Full name</label><input name="name" placeholder="Full name" required></div>
+    <div class="application-field"><label class="req">Email</label><input name="email" type="email" placeholder="Email" required></div>
+    <div class="application-field"><label>Phone</label><input name="phone" type="tel" placeholder="Phone"></div>
+    <div class="application-field"><label class="req">Resume/CV</label><input name="resume" type="file" required></div>
+    <div class="application-field"><label>Additional information</label><textarea name="comments" rows="7" placeholder="Add a cover letter or anything else you want to share."></textarea></div>
+    <button class="template-btn-submit" type="button">Submit application</button>
+  </form>
+</body>
+</html>

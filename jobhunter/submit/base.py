@@ -26,13 +26,17 @@ from ..store import ApplyMethod
 class SubmitResult:
     """Outcome of a dry-run or (gated) real submission attempt."""
 
-    action: str  # "dry_run" | "sent" | "skipped" | "needs_human" | "needs_auth" | "failed"
+    # dry_run | sent | submitted | needs_review | needs_human | needs_auth
+    # | blocked_no_browser | skipped | failed
+    action: str
     ok: bool = True
-    outbox_path: Optional[str] = None
+    outbox_path: Optional[str] = None       # .eml, or ATS field-map .json
+    screenshot: Optional[str] = None        # ATS review-state PNG
     external_ref: Optional[str] = None
     recipient: Optional[str] = None
     error: Optional[str] = None
     note: Optional[str] = None
+    detail: Optional[dict] = None           # e.g. {"unmapped_required": [...]}
 
 
 @runtime_checkable

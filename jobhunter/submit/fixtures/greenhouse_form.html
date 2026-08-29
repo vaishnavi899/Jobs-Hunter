@@ -1,0 +1,43 @@
+<!doctype html>
+<!--
+  Local approximation of a Greenhouse application form, for offline demo and
+  testing of the field-mapping + pre-submit validation flow. Field ids/names
+  mirror the ones the real Greenhouse-hosted form uses (first_name, last_name,
+  email, phone, a file input for the resume, a cover-letter textarea, and a
+  required custom question). Not affiliated with Greenhouse.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Apply — Senior Engineer (Greenhouse)</title>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; max-width: 680px; margin: 28px auto; color: #1f2d3d; }
+    h1 { font-size: 22px; } h2 { font-size: 15px; color:#4a5568; font-weight:normal; margin-top:-8px;}
+    .field { margin: 16px 0; }
+    label { display:block; font-weight:bold; margin-bottom:4px; }
+    label.req::after { content:" *"; color:#e53e3e; }
+    input, textarea, select { width:100%; padding:8px; border:1px solid #cbd5e0; border-radius:4px; box-sizing:border-box; }
+    button { margin-top:18px; background:#248f4b; color:#fff; border:none; padding:11px 20px; border-radius:4px; font-size:15px; cursor:pointer; }
+    .company { color:#248f4b; font-weight:bold; }
+  </style>
+</head>
+<body>
+  <h1><span class="company">Greenhouse</span> — Apply for this Job</h1>
+  <h2>Backend Engineer · India (Remote)</h2>
+  <form id="application_form">
+    <div class="field"><label class="req" for="first_name">First Name</label><input id="first_name" name="first_name" required></div>
+    <div class="field"><label for="last_name">Last Name</label><input id="last_name" name="last_name"></div>
+    <div class="field"><label class="req" for="email">Email</label><input id="email" name="email" type="email" required></div>
+    <div class="field"><label for="phone">Phone</label><input id="phone" name="phone" type="tel"></div>
+    <div class="field"><label class="req" for="resume">Resume/CV</label><input id="resume" name="resume" type="file" required></div>
+    <div class="field"><label for="cover_letter">Cover Letter</label><textarea id="cover_letter" name="cover_letter" rows="7"></textarea></div>
+    <div class="field"><label class="req" for="q_hear">How did you hear about us?</label>
+      <select id="q_hear" name="q_hear" required>
+        <option value="">Select…</option>
+        <option>LinkedIn</option><option>Referral</option><option>Company website</option><option>Other</option>
+      </select>
+    </div>
+    <button id="submit_app" type="button">Submit Application</button>
+  </form>
+</body>
+</html>

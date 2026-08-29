@@ -76,6 +76,10 @@ class SubmissionConfig(BaseModel):
     auto_send_channels: list[str] = Field(default_factory=list)
     delay_seconds_min: int = 30
     delay_seconds_max: int = 90
+    # When true (or env JOBHUNTER_ATS_FIXTURES=1), ATS adapters navigate the
+    # bundled local form fixtures instead of the live posting URL — a safe
+    # offline demo of the fill + screenshot flow. Default false = real URLs.
+    ats_demo_fixtures: bool = False
 
 
 class CapsConfig(BaseModel):

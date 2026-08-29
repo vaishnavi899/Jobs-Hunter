@@ -16,10 +16,16 @@ dependencies = [
     "beautifulsoup4>=4.12",  # extract text from fetched JD pages (checkpoint 3)
     # Later-checkpoint dependencies:
     #   apscheduler (watch loop)      -> checkpoint 8
-    #   playwright  (ATS adapters)    -> checkpoints 6-7
-    #   google-api-python-client, google-auth-oauthlib (Gmail) -> checkpoint 5
     #   python-telegram-bot           -> checkpoint 8
 ]
+
+[project.optional-dependencies]
+# ATS adapters (Greenhouse/Lever) drive a headless browser. Optional so the
+# rest of the pipeline installs and runs with no browser. Enable with:
+#   uv sync --extra ats   (then: playwright install chromium)
+ats = ["playwright>=1.40"]
+# Real Gmail sending (the gated `send --send --i-confirm` path). Optional.
+gmail = ["google-api-python-client>=2.0", "google-auth-oauthlib>=1.0"]
 
 [project.scripts]
 jobhunter = "jobhunter.cli:app"
