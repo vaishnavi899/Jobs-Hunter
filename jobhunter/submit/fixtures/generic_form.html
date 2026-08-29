@@ -1,0 +1,34 @@
+<!doctype html>
+<!--
+  A deliberately NON-standard careers-page form (not a known ATS), to test the
+  generic adapter's heuristic field detection: unusual field names
+  (applicant_full_name, contact_email, phone_number, resume_file, message) that
+  it must map by type + label/name/placeholder keywords, not by a fixed schema.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Careers — Apply</title>
+  <style>
+    body { font-family: Georgia, 'Times New Roman', serif; max-width: 620px; margin: 30px auto; color:#2b2b2b; }
+    h1 { font-size: 22px; }
+    .row { margin: 15px 0; }
+    label { display:block; font-weight:bold; margin-bottom:5px; }
+    label.req::after { content:" *"; color:#b00020; }
+    input, textarea { width:100%; padding:9px; border:1px solid #d0c8bd; border-radius:4px; box-sizing:border-box; }
+    button { margin-top:18px; background:#8a5a2b; color:#fff; border:none; padding:11px 22px; border-radius:4px; font-size:15px; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <h1>Join our team — Software Engineer</h1>
+  <p style="color:#666;">Apply directly below.</p>
+  <form>
+    <div class="row"><label class="req" for="fullname">Full Name</label><input id="fullname" name="applicant_full_name" placeholder="Your full name" required></div>
+    <div class="row"><label class="req" for="mail">Email Address</label><input id="mail" name="contact_email" type="email" placeholder="you@example.com" required></div>
+    <div class="row"><label for="tel">Phone Number</label><input id="tel" name="phone_number" placeholder="Phone"></div>
+    <div class="row"><label class="req" for="cv">Upload Resume</label><input id="cv" name="resume_file" type="file" required></div>
+    <div class="row"><label for="msg">Message / Cover Letter</label><textarea id="msg" name="message" rows="7" placeholder="Tell us why you're a fit"></textarea></div>
+    <button type="submit">Send Application</button>
+  </form>
+</body>
+</html>

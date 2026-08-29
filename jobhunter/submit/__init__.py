@@ -31,30 +31,68 @@ from ..store import (
     get_session,
     init_db,
 )
+from .ashby import AshbyAdapter
 from .base import Adapter, SubmitResult
 from .email import OUTBOX, EmailAdapter
+from .generic import GenericAdapter
 from .greenhouse import GreenhouseAdapter
 from .lever import LeverAdapter
+from .workable import WorkableAdapter
 
-__all__ = ["get_adapter", "SubmitResult", "Adapter", "run_send"]
+__all__ = ["get_adapter", "route", "SubmitResult", "Adapter", "run_send"]
 
-_ATS_METHODS = {ApplyMethod.ats_greenhouse, ApplyMethod.ats_lever}
+# Adapters that produce a browser screenshot (idempotency keys on that).
+_BROWSER_ATS = {
+    ApplyMethod.ats_greenhouse: GreenhouseAdapter,
+    ApplyMethod.ats_lever: LeverAdapter,
+    ApplyMethod.ats_ashby: AshbyAdapter,
+    ApplyMethod.ats_workable: WorkableAdapter,
+}
 
 
 def get_adapter(method):
-    """Return the adapter instance for an apply method, or None if not built."""
+    """Return the adapter instance for a known apply method, or None."""
+    cls = _BROWSER_ATS.get(method)
+    if cls is not None:
+        return cls()
     if method == ApplyMethod.email:
         return EmailAdapter()
-    if method == ApplyMethod.ats_greenhouse:
-        return GreenhouseAdapter()
-    if method == ApplyMethod.ats_lever:
-        return LeverAdapter()
     return None
 
 
-def _has_artifact(app: Application, method) -> bool:
+def _http_url(job) -> str | None:
+    if job.apply_target and job.apply_target.startswith("http"):
+        return job.apply_target
+    if job.raw_post and job.raw_post.source_url and job.raw_post.source_url.startswith("http"):
+        return job.raw_post.source_url
+    return None
+
+
+def route(job) -> tuple[object | None, str | None]:
+    """Pick an adapter for the job's source. Returns (adapter, reason_if_none).
+
+    email -> EmailAdapter; greenhouse/lever/ashby/workable -> their adapter;
+    any other real application URL -> GenericAdapter (best-effort). DM and
+    sources with no usable URL stay needs_review with a clear reason.
+    """
+    method = job.apply_method
+    known = get_adapter(method)
+    if known is not None:
+        return known, None
+    if method == ApplyMethod.dm:
+        return None, "DM application — never automated (queue for manual outreach)"
+    if _http_url(job):
+        return GenericAdapter(), None
+    return None, f"no application URL for apply_method={method.value}"
+
+
+def _is_browser_adapter(adapter) -> bool:
+    return hasattr(adapter, "fixture")  # every Playwright adapter has one
+
+
+def _has_artifact(app: Application, adapter) -> bool:
     """True if a completed dry-run artifact already exists (idempotency)."""
-    if method in _ATS_METHODS:
+    if _is_browser_adapter(adapter):
         return bool(app.screenshot_path and Path(app.screenshot_path).exists())
     return bool(app.outbox_path and Path(app.outbox_path).exists())
 
@@ -115,20 +153,19 @@ def run_send(
 
         for app in apps:
             job = app.job
-            method = job.apply_method
 
             if app.status == ApplicationStatus.submitted:
                 bump("skipped_sent")
                 continue
 
-            adapter = get_adapter(method)
+            adapter, reason = route(job)
             if adapter is None:
                 app.status = ApplicationStatus.needs_human
-                app.error = f"no adapter for apply_method={method.value} (built in a later checkpoint)"
+                app.error = reason
                 bump("needs_review")
                 continue
 
-            if not live and _has_artifact(app, method):
+            if not live and _has_artifact(app, adapter):
                 bump("skipped_existing")
                 continue
 
@@ -136,11 +173,11 @@ def run_send(
             _record(app, res, now)
             bump(res.action)
 
-            if method == ApplyMethod.email and res.outbox_path:
-                sample["eml"] = sample["eml"] or res.outbox_path
-            if method in _ATS_METHODS:
+            if _is_browser_adapter(adapter):
                 sample["ats_json"] = sample["ats_json"] or res.outbox_path
                 sample["ats_png"] = sample["ats_png"] or res.screenshot
+            elif res.outbox_path:
+                sample["eml"] = sample["eml"] or res.outbox_path
         session.commit()
 
     return {"counts": counts, "live": live, "outbox": str(OUTBOX), "sample": sample}

@@ -48,6 +48,60 @@ _REQUIRED_JS = """
 """
 
 
+def fill_first(page, selector: str, value: str) -> bool:
+    """Fill the first element matching `selector` with `value`. Tolerant."""
+    if not value:
+        return False
+    el = page.query_selector(selector)
+    if not el:
+        return False
+    try:
+        el.fill(value)
+        return True
+    except Exception:
+        return False
+
+
+def upload_resume(page, path: str, selector: str = "input[type='file']") -> bool:
+    if not path:
+        return False
+    el = page.query_selector(selector)
+    if not el:
+        return False
+    try:
+        el.set_input_files(path)
+        return True
+    except Exception:
+        return False
+
+
+class AtsAdapterBase:
+    """Shared plumbing for Playwright ATS adapters. Subclasses set `ats`,
+    `fixture`, `submit_selector`, and implement `fill(page, fields)`."""
+
+    ats = ""
+    fixture = ""
+    submit_selector = "button[type=submit]"
+
+    def resolve_url(self, job) -> str:
+        if job.apply_target and job.apply_target.startswith("http"):
+            return job.apply_target
+        if job.raw_post and job.raw_post.source_url:
+            return job.raw_post.source_url
+        return ""
+
+    def fill(self, page, fields: dict) -> None:  # pragma: no cover - overridden
+        raise NotImplementedError
+
+    def dry_run(self, job, application, cfg):
+        from ..config import load_resume
+        return execute(self, job, application, cfg, load_resume() or {}, do_click=False)
+
+    def send(self, job, application, cfg):
+        from ..config import load_resume
+        return execute(self, job, application, cfg, load_resume() or {}, do_click=True)
+
+
 def browser_disabled() -> bool:
     """Force the blocked_no_browser path (for tests / environments w/o a browser)."""
     return os.getenv("JOBHUNTER_DISABLE_BROWSER") == "1"

@@ -78,8 +78,8 @@ Built as separate commits; each checkpoint pauses for verification.
 3. Parse + filter
 4. Score + draft
 5. Email adapter + dry-run (gated)
-6. **Greenhouse + Lever ATS adapters (gated)** ← current
-7. Ashby, Workable, generic form (gated)
+6. Greenhouse + Lever ATS adapters (gated)
+7. **Ashby, Workable, generic form (gated)** ← current
 8. Telegram + scheduler + safety rails
 
 ## Safety rails

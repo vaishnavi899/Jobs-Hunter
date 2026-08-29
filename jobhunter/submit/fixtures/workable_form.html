@@ -1,0 +1,42 @@
+<!doctype html>
+<!--
+  Local approximation of a Workable application form, for offline demo and
+  testing. Field names mirror the real Workable-hosted form (firstname,
+  lastname, email, phone, a resume file input, a summary/cover textarea) plus a
+  required custom screening question to exercise the needs_review path. Not
+  affiliated with Workable.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Apply — ML Engineer (Workable)</title>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; max-width: 640px; margin: 28px auto; color:#20313b; }
+    h1 { font-size: 21px; } .co { color:#0f9d58; }
+    .field { margin: 15px 0; }
+    label { display:block; font-weight:bold; margin-bottom:5px; }
+    label.req::after { content:" *"; color:#d93025; }
+    input, textarea, select { width:100%; padding:9px; border:1px solid #cdd5db; border-radius:4px; box-sizing:border-box; }
+    button { margin-top:18px; background:#0f9d58; color:#fff; border:none; padding:11px 22px; border-radius:4px; font-size:15px; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <h1><span class="co">Workable</span> — Apply for this position</h1>
+  <h2 style="font-weight:normal;color:#5a6b74;font-size:14px;">ML Engineer · Hyderabad</h2>
+  <form>
+    <div class="field"><label class="req" for="firstname">First name</label><input id="firstname" name="candidate[firstname]" required></div>
+    <div class="field"><label for="lastname">Last name</label><input id="lastname" name="candidate[lastname]"></div>
+    <div class="field"><label class="req" for="email">Email</label><input id="email" name="candidate[email]" type="email" required></div>
+    <div class="field"><label for="phone">Phone</label><input id="phone" name="candidate[phone]" type="tel"></div>
+    <div class="field"><label class="req" for="resume">Resume</label><input id="resume" name="resume" type="file" required></div>
+    <div class="field"><label for="summary">Cover letter / summary</label><textarea id="summary" name="candidate[summary]" rows="7"></textarea></div>
+    <div class="field"><label class="req" for="q_source">How did you hear about us?</label>
+      <select id="q_source" name="candidate[answers][q_source]" required>
+        <option value="">Please select…</option>
+        <option>LinkedIn</option><option>Referral</option><option>Job board</option><option>Other</option>
+      </select>
+    </div>
+    <button type="submit" data-ui="submit-application">Submit application</button>
+  </form>
+</body>
+</html>

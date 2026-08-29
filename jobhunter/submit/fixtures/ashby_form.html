@@ -1,0 +1,34 @@
+<!doctype html>
+<!--
+  Local approximation of an Ashby application form, for offline demo and testing
+  of the field-mapping + pre-submit validation flow. Field names mirror the real
+  Ashby-hosted form's system fields (_systemfield_name/email/phone), a resume
+  file input, and a cover-letter textarea. Not affiliated with Ashby.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Apply — AI Engineer (Ashby)</title>
+  <style>
+    body { font-family: 'Inter', Arial, sans-serif; max-width: 640px; margin: 28px auto; color:#0f172a; }
+    h1 { font-size: 21px; } .co { color:#4f46e5; }
+    .ashby-field { margin: 15px 0; }
+    label { display:block; font-weight:600; margin-bottom:5px; }
+    label.req::after { content:" *"; color:#dc2626; }
+    input, textarea { width:100%; padding:9px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box; }
+    button { margin-top:18px; background:#4f46e5; color:#fff; border:none; padding:11px 22px; border-radius:6px; font-size:15px; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <h1><span class="co">Ashby</span> — Application</h1>
+  <h2 style="font-weight:normal;color:#475569;font-size:14px;">AI Engineer · India (Remote)</h2>
+  <form class="ashby-application-form">
+    <div class="ashby-field"><label class="req" for="_systemfield_name">Name</label><input id="_systemfield_name" name="_systemfield_name" aria-label="Name" required></div>
+    <div class="ashby-field"><label class="req" for="_systemfield_email">Email</label><input id="_systemfield_email" name="_systemfield_email" type="email" aria-label="Email" required></div>
+    <div class="ashby-field"><label for="_systemfield_phone">Phone</label><input id="_systemfield_phone" name="_systemfield_phone" type="tel" aria-label="Phone"></div>
+    <div class="ashby-field"><label class="req" for="resume">Resume</label><input id="resume" name="_systemfield_resume" type="file" required></div>
+    <div class="ashby-field"><label for="cover">Cover letter</label><textarea id="cover" name="_systemfield_coverletter" aria-label="Cover letter" rows="7"></textarea></div>
+    <button type="submit" class="ashby-application-form-submit-button">Submit Application</button>
+  </form>
+</body>
+</html>
