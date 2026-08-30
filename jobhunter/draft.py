@@ -34,6 +34,7 @@ are later checkpoints.
 
 from __future__ import annotations
 
+import html
 import re
 
 from .config import Config, load_config, load_resume
@@ -391,6 +392,25 @@ def get_drafter(cfg: Config):
     return TemplateDrafter(cfg)
 
 
+def clean_draft_text(d: dict) -> dict:
+    """Decode HTML entities in the human-readable draft text before it is stored
+    and later placed into a text/plain email body.
+
+    Any engine (Groq/Anthropic LLM or the offline template) can emit HTML-escaped
+    entities like `&amp;`, `&#39;`, `&lt;`. Mail clients do NOT decode entities in
+    text/plain, so the recipient would literally see `&amp;`. A single
+    html.unescape pass fixes it; on already-literal text it is a no-op (so it
+    never double-unescapes or corrupts real `&`). Applied to the human-readable
+    fields only (subject, body, reordered bullets) — the email builder's
+    quoted-printable transfer-encoding still runs afterward and is unaffected.
+    """
+    return {
+        "subject": html.unescape(d.get("subject") or ""),
+        "body": html.unescape(d.get("body") or ""),
+        "resume_bullets": [html.unescape(b) for b in (d.get("resume_bullets") or [])],
+    }
+
+
 def run_draft(cfg: Config | None = None, limit: int | None = None) -> dict:
     """Draft the highest-scoring scored jobs that don't already have a draft.
 
@@ -450,6 +470,9 @@ def run_draft(cfg: Config | None = None, limit: int | None = None) -> dict:
                     skipped += 1
                     job.status = JobStatus.needs_human
                     continue
+            # Central HTML-entity cleanup so ALL engines benefit before the text
+            # ever reaches a text/plain email body.
+            d = clean_draft_text(d)
             session.add(
                 Application(
                     job_id=job.id,
