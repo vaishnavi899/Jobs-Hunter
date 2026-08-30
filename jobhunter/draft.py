@@ -34,11 +34,11 @@ are later checkpoints.
 
 from __future__ import annotations
 
-import html
 import re
 
 from .config import Config, load_config, load_resume
 from .score import _canon, canonical_skills
+from .textclean import normalize_subject, unescape_entities
 from .store import (
     Application,
     ApplicationStatus,
@@ -393,21 +393,19 @@ def get_drafter(cfg: Config):
 
 
 def clean_draft_text(d: dict) -> dict:
-    """Decode HTML entities in the human-readable draft text before it is stored
-    and later placed into a text/plain email body.
+    """Clean the human-readable draft text when it is persisted on the
+    Application (subject + body + reordered bullets).
 
-    Any engine (Groq/Anthropic LLM or the offline template) can emit HTML-escaped
-    entities like `&amp;`, `&#39;`, `&lt;`. Mail clients do NOT decode entities in
-    text/plain, so the recipient would literally see `&amp;`. A single
-    html.unescape pass fixes it; on already-literal text it is a no-op (so it
-    never double-unescapes or corrupts real `&`). Applied to the human-readable
-    fields only (subject, body, reordered bullets) — the email builder's
-    quoted-printable transfer-encoding still runs afterward and is unaffected.
+    Uses the same central helpers the send/adapter path uses, so stored text
+    matches what is actually sent: entities decoded (fixpoint, idempotent) and
+    the subject folded to a plain ASCII hyphen. The real defence against a dirty
+    .eml lives at the adapter (see submit/email.py) — this keeps the persisted /
+    inspected text consistent for any engine (Groq / Anthropic / template).
     """
     return {
-        "subject": html.unescape(d.get("subject") or ""),
-        "body": html.unescape(d.get("body") or ""),
-        "resume_bullets": [html.unescape(b) for b in (d.get("resume_bullets") or [])],
+        "subject": normalize_subject(d.get("subject") or ""),
+        "body": unescape_entities(d.get("body") or ""),
+        "resume_bullets": [unescape_entities(b) for b in (d.get("resume_bullets") or [])],
     }
 
 

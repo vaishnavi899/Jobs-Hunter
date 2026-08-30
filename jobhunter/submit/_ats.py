@@ -24,6 +24,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..draft import job_link
+from ..textclean import unescape_entities
 from .base import SubmitResult
 from .email import OUTBOX, RESUME_PDF, _safe_name
 
@@ -122,7 +123,8 @@ def common_fields(job, application, cfg: Config, resume: dict) -> dict:
         "email": cfg.signature.email,
         "phone": contact.get("phone", "") or "",
         "resume_upload": str(RESUME_PDF) if RESUME_PDF.exists() else "",
-        "cover_letter": application.body or "",
+        # ATS adapters reuse the cover note too — clean it the same way.
+        "cover_letter": unescape_entities(application.body or ""),
     }
 
 

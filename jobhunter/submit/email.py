@@ -20,6 +20,7 @@ from pathlib import Path
 
 from ..config import PROJECT_ROOT, Config
 from ..store import ApplyMethod
+from ..textclean import normalize_subject, unescape_entities
 from .base import SubmitResult
 
 OUTBOX = PROJECT_ROOT / "outbox"
@@ -50,7 +51,11 @@ class EmailAdapter:
     # ------------------------------------------------------------------ #
     def build_message(self, job, application, cfg: Config) -> EmailMessage:
         msg = EmailMessage()
-        msg["Subject"] = application.subject or f"{job.title} — {cfg.signature.name}"
+        # Clean at the TRUE final assembly point: decode any HTML entities and
+        # fold the subject's unicode dashes to ASCII, so the actual bytes written
+        # to the .eml are clean regardless of which engine (or which older
+        # Application) produced the text. Idempotent; no-op on already-clean text.
+        msg["Subject"] = normalize_subject(application.subject or f"{job.title} - {cfg.signature.name}")
         msg["From"] = cfg.signature.email
         msg["Reply-To"] = cfg.signature.email
         recipient = recipient_for(job)
@@ -67,7 +72,7 @@ class EmailAdapter:
         msg["X-Jobhunter-Job-Id"] = str(job.id)
         msg["X-Jobhunter-Fit-Score"] = str(job.fit_score if job.fit_score is not None else "")
 
-        msg.set_content(application.body or "")
+        msg.set_content(unescape_entities(application.body or ""))
 
         if RESUME_PDF.exists():
             msg.add_attachment(
